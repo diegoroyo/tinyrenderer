@@ -1,0 +1,2 @@
+# tinyrenderer
+Renderizador de imágenes
