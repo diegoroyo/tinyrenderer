@@ -2,10 +2,12 @@
 
 #pragma once
 
+// Una imagen PNG está formada por varios chunks de este tipo
 class PNGChunk {
    private:
-    static const uint32_t CRC32_DIVISOR = 0x04C11DB7; //TODO 0xEDB88320L
-    uint8_t* crcDividend;
+    static const uint32_t CRC32_DIVISOR = 0xEDB88320;
+    static uint32_t CRC_TABLE[256];
+    uint8_t* chunkCrcDividend;
 
     uint32_t calculate_crc(uint8_t* stream, int streamLength);
 
