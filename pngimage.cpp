@@ -41,5 +41,7 @@ bool PNGImage::read_png_file(const char* filename) {
     }
     
     // TODO leer chunks
+    PNGChunk chunk;
+    chunk.read_file(is);
 
 }

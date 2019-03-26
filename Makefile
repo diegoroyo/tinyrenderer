@@ -1,6 +1,7 @@
 BINDIR = bin
 
 PNGIMAGE = pngimage
+PNGCHUNK = pngchunk
 MAIN = main
 
 NOMBREEXE = main
@@ -15,8 +16,11 @@ all: ${BINDIR}/${NOMBREEXE}
 clean:
 	rm -rf ${BINDIR}/*
 
-${BINDIR}/${NOMBREEXE}: ${BINDIR}/${PNGIMAGE}.o ${MAIN}.cpp
+${BINDIR}/${NOMBREEXE}: ${BINDIR}/${PNGIMAGE}.o ${BINDIR}/${PNGCHUNK}.o ${MAIN}.cpp
 	${CC} $^ ${CPPFLAGS} -o $@
 
 ${BINDIR}/${PNGIMAGE}.o: ${PNGIMAGE}.cpp ${PNGIMAGE}.h
+	${CC} -c ${CPPFLAGS} $< -o $@
+
+${BINDIR}/${PNGCHUNK}.o: ${PNGCHUNK}.cpp ${PNGCHUNK}.h
 	${CC} -c ${CPPFLAGS} $< -o $@
