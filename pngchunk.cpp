@@ -51,7 +51,7 @@ PNGChunk::PNGChunk() : length(0), chunkType(nullptr), data(nullptr), crc(0) {
 // Devuelve true si la lectura es correcta, false si no
 bool PNGChunk::read_file(std::ifstream& is) {
     if (!is.good()) {
-        std::cerr << "An error ocurred while reading the data\n";
+        std::cerr << "An error ocurred while reading the data" << std::endl;
         return false;
     }
 
@@ -76,9 +76,16 @@ bool PNGChunk::read_file(std::ifstream& is) {
     if (calc_crc == this->crc) {
         return true;
     } else {
-        std::cerr << "Incorrect chunk CRC\n";
+        std::cerr << "Incorrect chunk CRC" << std::endl;
         return false;
     }
+}
+
+// Comprobación del tipo de chunk
+bool PNGChunk::is_type(const char* type) {
+    // paso a string para añadir terminación
+    std::string chunkType(chunkType, 4);
+    return chunkType.compare(type);
 }
 
 PNGChunk::~PNGChunk() { delete[] this->chunkCrcDividend; }

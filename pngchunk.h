@@ -3,6 +3,7 @@
 #pragma once
 
 // Una imagen PNG está formada por varios chunks de este tipo
+// http://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html
 // Cada chunk tiene la siguiente estructura:
 //   4 bytes: longitud del fichero (Big Endian)
 //   4 bytes: tipo de chunk (ver IHDR, PLTE, IDAT, IEND)
@@ -26,4 +27,5 @@ class PNGChunk {
     ~PNGChunk();
 
     bool read_file(std::ifstream& is);
+    bool is_type(const char* type);
 };
