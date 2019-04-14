@@ -17,7 +17,7 @@ void imageInfo(PNGImage& image) {
 
 int main() {
     PNGImage img;
-    if (img.read_png_file("png/color.png")) {
+    if (img.read_png_file("png/test_tom.png")) {
         imageInfo(img);
     } else {
         std::cout << "Error al leer la imagen" << std::endl;
