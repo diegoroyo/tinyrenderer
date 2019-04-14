@@ -76,9 +76,14 @@ bool PNGChunk::read_file(std::ifstream& is) {
     if (calc_crc == this->crc) {
         if (this->is_type("IHDR")) {
             this->chunkInfo = new PNGChunk::IHDRInfo();
-            this->chunkInfo->read_info(data, length);
+            return this->chunkInfo->read_info(data, length);
+        } else if (this->is_type("IDAT")) {
+            this->chunkInfo = new PNGChunk::IDATInfo();
+            return this->chunkInfo->read_info(data, length);
+        } else {
+            // No hace falta tratar nada para este tipo
+            return true;
         }
-        return true;
     } else {
         std::cerr << "Incorrect chunk CRC" << std::endl;
         return false;
@@ -94,7 +99,13 @@ bool PNGChunk::is_type(const char* type) {
 
 PNGChunk::~PNGChunk() { delete[] this->chunkCrcDividend; }
 
+// Más info:
+// http://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html
 bool PNGChunk::IHDRInfo::read_info(uint8_t* data, uint8_t length) {
+    if (length != IHDR_LENGTH) {
+        std::cerr << "IHDR chunk has wrong length" << std::endl;
+        return false;
+    }
     this->width = swap_bytes(data);
     this->height = swap_bytes(&data[4]);
     this->bitDepth = data[8];
@@ -102,4 +113,67 @@ bool PNGChunk::IHDRInfo::read_info(uint8_t* data, uint8_t length) {
     this->compression = data[10];
     this->filter = data[11];
     this->interlace = data[12];
+    return true;
+}
+
+// Cálculo del checksum Adler-32:
+// https://en.wikipedia.org/wiki/Adler-32
+uint32_t PNGChunk::IDATInfo::adler_checksum(uint8_t* data, uint8_t length) {
+    int a = 1;
+    int b = 0;
+    for (int i = 0; i < length; i++) {
+        a = (a + data[i]) % ADLER_MODULO;
+        b = (b + a) % ADLER_MODULO;
+    }
+    return b * 65536 + a;
+}
+
+// Más info:
+// https://stackoverflow.com/questions/33535388/deflate-compression-spec-clarifications
+// https://github.com/libyal/assorted/blob/master/documentation/Deflate%20(zlib)%20compressed%20data%20format.asciidoc
+bool PNGChunk::IDATInfo::read_info(uint8_t* data, uint8_t length) {
+    if (length < IDAT_LENGTH) {
+        std::cerr << "IDAT chunk has wrong length" << std::endl;
+        return false;
+    }
+
+    // Cabecera (2 bytes)
+    uint16_t compressionHeader = data[0] << 8 | data[1];
+    if (compressionHeader % 31 != 0) {
+        std::cerr << "IDAT chunk has invalid CHECK bits" << std::endl;
+        return false;
+    }
+    // Comprobar que CM = 8, FLEVEL = 0 y FDICT = 0
+    if (static_cast<uint16_t>(compressionHeader & 0x0FE0) != 0x0800) {
+        std::cerr << "Unsupported IDAT chunk compression type" << std::endl;
+        return false;
+    }
+
+    // Cabecera del bloque (3 bits + 5 sin usar: 1 byte)
+    uint8_t blockHeader = data[2];
+    // Un bloque (BFINAL = 1) sin comprimir (BTYPE = 00), el resto del byte
+    // no contiene información (todo 0)
+    if (blockHeader != 0x01) {
+        std::cerr << "Unsupported IDAT block type" << std::endl;
+        return false;
+    }
+
+    // Longitud del bloque (2 bytes) + invertido Ca1 (2 bytes)
+    uint16_t blockLength = data[4] << 8 | data[3];
+    uint16_t invertedLength = data[6] << 8 | data[5];
+    if (blockLength & invertedLength != 0 || blockLength != length - IDAT_LENGTH) {
+        std::cerr << "Invalid IDAT block length" << std::endl;
+        return false;
+    }
+
+    // Checksum Adler-32 de los datos (data, length)
+    this->data = &data[7];
+    this->length = blockLength;
+    uint32_t adlerChecksum = swap_bytes(&data[length - 4]);
+    if (adlerChecksum != adler_checksum(this->data, this->length)) {
+        std::cerr << "Invalid IDAT block checksum" << std::endl;
+        return false;
+    }
+
+    return true;
 }

@@ -11,7 +11,7 @@
 //   4 bytes: CRC
 class PNGChunk {
    private:
-    static const uint32_t CRC32_DIVISOR = 0xEDB88320;
+    static const uint32_t CRC32_DIVISOR = 0xEDB88320; // ver calculate_crc
     static uint32_t CRC_TABLE[256];
     uint8_t* chunkCrcDividend;
 
@@ -26,9 +26,30 @@ class PNGChunk {
 
     // Información principal de la imagen
     class IHDRInfo : public ChunkInfo {
+       private:
+        // Bytes de información (ver campos públicos)
+        static const int IHDR_LENGTH = 13;
+
        public:
         uint32_t width, height;
         uint8_t bitDepth, colorType, compression, filter, interlace;
+
+        bool read_info(uint8_t* data, uint8_t length) override;
+    };
+
+    // Datos (colores) de la imagen
+    class IDATInfo : public ChunkInfo {
+       private:
+        // Tamaño mínimo (headers sin datos)
+        // 2 header + 1 block header + 4 block length
+        //   (+ datos bloque) + 4 adler32 al final
+        static const int IDAT_LENGTH = 11;
+        static const int ADLER_MODULO = 65521; // ver adler_checksum
+
+        uint32_t adler_checksum(uint8_t* data, uint8_t length);
+       public:
+        uint8_t* data;
+        uint16_t length;
 
         bool read_info(uint8_t* data, uint8_t length) override;
     };
