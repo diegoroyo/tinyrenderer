@@ -41,7 +41,8 @@ uint32_t PNGChunk::calculate_crc(uint8_t* stream, int streamLength) {
 }
 
 // Constructor (crear tabla para el cálculo de CRC si es necesario)
-PNGChunk::PNGChunk() : length(0), chunkType(nullptr), data(nullptr), crc(0) {
+PNGChunk::PNGChunk()
+    : length(0), chunkType(nullptr), data(nullptr), crc(0), chunkInfo(nullptr) {
     static bool crcTableCalculated = false;
     if (!crcTableCalculated) {
         for (int i = 0; i < 256; i++) {
@@ -121,11 +122,10 @@ bool PNGChunk::read_file(std::ifstream& is) {
             uint8_t* firstChunkData = info->blockData;
             info->blockData = new uint8_t[info->blockLength];
             memcpy(info->blockData, firstChunkData, info->chunkLength);
-            // no hace falta borrar firstChunkData, forma parte de los datos del chunk
+            // no hace falta borrar firstChunkData, ya lo borra este chunk
 
             // Leer el resto de chunks IDAT (tienen que ir seguidos)
             while (isChunkOk && info->chunkLength < info->blockLength) {
-
                 // Leer chunk siguiente
                 PNGChunk moreChunk;
                 isChunkOk = moreChunk.read_data(is);
@@ -139,7 +139,8 @@ bool PNGChunk::read_file(std::ifstream& is) {
                 moreChunk.chunkInfo = new PNGChunk::IDATInfo();
                 PNGChunk::IDATInfo* moreInfo =
                     dynamic_cast<PNGChunk::IDATInfo*>(moreChunk.chunkInfo);
-                moreInfo->set_data(moreChunk.data, info->blockLength - info->chunkLength,
+                moreInfo->set_data(moreChunk.data,
+                                   info->blockLength - info->chunkLength,
                                    moreChunk.length);
 
                 // Juntar los datos del leido con la que tenemos
@@ -174,7 +175,9 @@ bool PNGChunk::is_type(const char* type) {
 
 PNGChunk::~PNGChunk() {
     delete[] this->chunkCrcDividend;
-    delete this->chunkInfo;
+    if (chunkInfo) {
+        delete this->chunkInfo;
+    }
 }
 
 // Más info:
