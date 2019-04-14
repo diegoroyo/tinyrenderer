@@ -18,10 +18,26 @@ class PNGChunk {
     uint32_t calculate_crc(uint8_t* stream, int streamLength);
 
    public:
+    // Posibilidad de ampliar a más tipos: PLTE, etc.
+    class ChunkInfo {
+       public:
+        virtual bool read_info(uint8_t* data, uint8_t length) = 0;
+    };
+
+    // Información principal de la imagen
+    class IHDRInfo : public ChunkInfo {
+       public:
+        uint32_t width, height;
+        uint8_t bitDepth, colorType, compression, filter, interlace;
+
+        bool read_info(uint8_t* data, uint8_t length) override;
+    };
+
     uint32_t length;
     uint8_t* chunkType;
     uint8_t* data;
     uint32_t crc;
+    ChunkInfo* chunkInfo;
 
     PNGChunk();
     ~PNGChunk();

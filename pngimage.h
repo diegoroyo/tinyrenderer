@@ -5,6 +5,8 @@
 
 // Métodos de apoyo para la lectura/escritura de imágenes PNG y su modificación
 // Referencia: https://en.wikipedia.org/wiki/Portable_Network_Graphics
+// De momento solo soporta imágenes sin paleta de colores ni alpha
+// y con 8 bits de profundidad de color
 class PNGImage {
    private:
     // Todos los archivos PNG tienen comienzan con estos 8 bytes (ver

@@ -58,9 +58,20 @@ bool PNGImage::read_png_file(const char* filename) {
             if (chunk.is_type("IEND")) {
                 endChunkRead = true;
             } else if (chunk.is_type("IHDR")) {
-                // TODO
+                PNGChunk::IHDRInfo* info = dynamic_cast<PNGChunk::IHDRInfo*>(chunk.chunkInfo);
+                // Solo se da soporte a imagenes PNG sencillas (solo color, sin paletas ni alpha)
+                if (info->compression == 0 && info->filter == 0 && info->interlace == 0
+                    && info->colorType == 2 && info->bitDepth == 8) {
+                    this->width = info->width;
+                    this->height = info->height;
+                } else {
+                    endChunkRead = true;
+                    isImageOk = false;
+                }
             } else if (chunk.is_type("IDAT")) {
                 // TODO
+            } else {
+                std::cerr << "Warning: unrecognized chunk type" << std::endl;
             }
 
         }

@@ -74,6 +74,10 @@ bool PNGChunk::read_file(std::ifstream& is) {
     // Comprobar CRC correcto
     uint32_t calc_crc = calculate_crc(this->chunkCrcDividend, this->length + 4);
     if (calc_crc == this->crc) {
+        if (this->is_type("IHDR")) {
+            this->chunkInfo = new PNGChunk::IHDRInfo();
+            this->chunkInfo->read_info(data, length);
+        }
         return true;
     } else {
         std::cerr << "Incorrect chunk CRC" << std::endl;
@@ -84,8 +88,18 @@ bool PNGChunk::read_file(std::ifstream& is) {
 // Comprobación del tipo de chunk
 bool PNGChunk::is_type(const char* type) {
     // paso a string para añadir terminación
-    std::string chunkType(chunkType, 4);
-    return chunkType.compare(type);
+    std::string typeString((char*)this->chunkType, 4);
+    return typeString.compare(type) == 0;
 }
 
 PNGChunk::~PNGChunk() { delete[] this->chunkCrcDividend; }
+
+bool PNGChunk::IHDRInfo::read_info(uint8_t* data, uint8_t length) {
+    this->width = swap_bytes(data);
+    this->height = swap_bytes(&data[4]);
+    this->bitDepth = data[8];
+    this->colorType = data[9];
+    this->compression = data[10];
+    this->filter = data[11];
+    this->interlace = data[12];
+}
