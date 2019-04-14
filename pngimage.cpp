@@ -42,10 +42,11 @@ bool PNGImage::read_png_file(const char* filename) {
     
     // Leer información de la imagen, chunk a chunk
     bool endChunkRead = false;
+    bool headerChunkRead = false;
     bool isImageOk = true; // lectura ha ido bien
     while (!endChunkRead) {
         PNGChunk chunk;
-        if (!chunk.read_file(is)){
+        if (!is.good() || !chunk.read_file(is)){
             if (is.eof()) {
                 std::cerr << "Warning: finished reading image without IEND chunk" << std::endl;
             } else {
@@ -55,23 +56,32 @@ bool PNGImage::read_png_file(const char* filename) {
             isImageOk = false;
         } else {
 
-            if (chunk.is_type("IEND")) {
-                endChunkRead = true;
-            } else if (chunk.is_type("IHDR")) {
+            if (chunk.is_type("IHDR")) {
                 PNGChunk::IHDRInfo* info = dynamic_cast<PNGChunk::IHDRInfo*>(chunk.chunkInfo);
                 // Solo se da soporte a imagenes PNG sencillas (solo color, sin paletas ni alpha)
                 if (info->compression == 0 && info->filter == 0 && info->interlace == 0
                     && info->colorType == 2 && info->bitDepth == 8) {
                     this->width = info->width;
                     this->height = info->height;
+                    headerChunkRead = true;
                 } else {
                     endChunkRead = true;
                     isImageOk = false;
                 }
-            } else if (chunk.is_type("IDAT")) {
-                // TODO
+            } else if (headerChunkRead) {
+                if (chunk.is_type("IDAT")) {
+                    PNGChunk::IDATInfo* info = dynamic_cast<PNGChunk::IDATInfo*>(chunk.chunkInfo);
+                    // TODO info->data contiene los datos de la imagen
+                    // https://stackoverflow.com/questions/49017937/png-decompressed-idat-chunk-how-to-read
+                } else if (chunk.is_type("IEND")) {
+                    endChunkRead = true;
+                } else {
+                    std::cerr << "Warning: unrecognized chunk type" << std::endl;
+                }
             } else {
-                std::cerr << "Warning: unrecognized chunk type" << std::endl;
+                std::cerr << "Error: the first chunk is not an IHDR chunk" << std::endl;
+                endChunkRead = true;
+                isImageOk = false;
             }
 
         }
