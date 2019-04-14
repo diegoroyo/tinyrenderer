@@ -131,6 +131,16 @@ bool PNGImage::read_png_file(const char* filename) {
     return isImageOk;
 }
 
+// Devuelve el color del pixel (x, y) de la imagen
+// o bien nullptr si se sale de la cuadrícula
+PNGImage::RGBColor* PNGImage::get_pixel(int x, int y) {
+    if (x >= 0 && x < this->width && y >= 0 && y < this->height) {
+        return pixels[y][x];
+    } else {
+        return nullptr;
+    }
+}
+
 PNGImage::~PNGImage() {
     for (int h = 0; h < this->height; h++) {
         for (int w = 0; w < this->width; w++) {
