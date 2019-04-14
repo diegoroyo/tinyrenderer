@@ -6,6 +6,18 @@
 
 PNGImage::PNGImage() : width(0), height(0) {}
 
+// Modo de filtrado #4, mira los pixeles a la izquierda y derecha
+// a: izquierda, b: arriba, c: arriba a la izquierda
+uint8_t PNGImage::paeth_pred(uint8_t a, uint8_t b, uint8_t c) {
+    uint8_t p = a + b - c;                    // estimación inicial
+    uint8_t pa = p - a >= 0 ? p - a : a - p;  // abs(p - a)
+    uint8_t pb = p - b >= 0 ? p - b : b - p;  // abs(p - b)
+    uint8_t pc = p - c >= 0 ? p - c : c - p;  // abs(p - c)
+    // devolver más cercano a a, b, c
+    // en caso de empate, a > b > c
+    return pa <= pb && pa <= pc ? a : (pb <= pc ? b : c);
+}
+
 // Datos descomprimidos de un chunk IDAT, añadir a la imagen
 // https://stackoverflow.com/questions/49017937/png-decompressed-idat-chunk-how-to-read
 bool PNGImage::read_IDAT_info(int& pixelX, int& pixelY,
@@ -18,12 +30,8 @@ bool PNGImage::read_IDAT_info(int& pixelX, int& pixelY,
         // Solo se soporta tipos 0, 1 y 2 (None, Sub y Add)
         // https://www.w3.org/TR/PNG-Filters.html
         if (pixelX == 0) {
-            if (info->blockData[i] > 2) {
-                // TODO filtros 3 y 4
-                std::cerr << "Error: unsupported filter type: "
-                          << (int)info->blockData[i]
-                          << " (supported types are None, Sub and Add)"
-                          << std::endl;
+            if (info->blockData[i] > 4) {
+                std::cerr << "Error: invalid filter type" << std::endl;
                 readOk = false;
             } else {
                 this->pixels[pixelY] = new PNGImage::RGBColor*[this->width];
@@ -33,19 +41,39 @@ bool PNGImage::read_IDAT_info(int& pixelX, int& pixelY,
         }
         // Leer datos del pixel (r, g, b 3 bytes en ese orden)
         if (readOk) {
-            uint8_t r = info->blockData[i];
-            uint8_t g = info->blockData[i + 1];
-            uint8_t b = info->blockData[i + 2];
+            uint16_t r = info->blockData[i], g = info->blockData[i + 1],
+                     b = info->blockData[i + 2];
+            PNGImage::RGBColor *left, *top, *leftTop;
+            if (pixelX > 0) {
+                left = this->pixels[pixelY][pixelX - 1];
+                if (pixelY > 0) {
+                    leftTop = this->pixels[pixelY - 1][pixelX - 1];
+                }
+            }
+            if (pixelY > 0) {
+                top = this->pixels[pixelY - 1][pixelX];
+            }
             if (filterType == 1 && pixelX > 0) {
                 // Sub(x) = Raw(x) - Raw(x-bpp)
-                r ^= this->pixels[pixelY][pixelX - 1]->r;
-                g ^= this->pixels[pixelY][pixelX - 1]->g;
-                b ^= this->pixels[pixelY][pixelX - 1]->b;
+                r += left->r;
+                g += left->g;
+                b += left->b;
             } else if (filterType == 2 && pixelY > 0) {
                 // Up(x) = Raw(x) - Prior(x)
-                r ^= this->pixels[pixelY - 1][pixelX]->r;
-                g ^= this->pixels[pixelY - 1][pixelX]->g;
-                b ^= this->pixels[pixelY - 1][pixelX]->b;
+                r += top->r;
+                g += top->g;
+                b += top->b;
+            } else if (filterType == 3 && pixelX > 0 && pixelY > 0) {
+                // Average(x) = Raw(x) - floor((Raw(x-bpp)+Prior(x))/2)
+                r += (left->r + top->r) / 2;
+                g += (left->g + top->g) / 2;
+                b += (left->b + top->b) / 2;
+            } else if (filterType == 4 && pixelX > 0 && pixelY > 0) {
+                // Paeth(x) = Raw(x) - PaethPredictor(Raw(x-bpp), Prior(x),
+                //   Prior(x-bpp))
+                r += paeth_pred(left->r, top->r, leftTop->r);
+                g += paeth_pred(left->g, top->g, leftTop->g);
+                b += paeth_pred(left->b, top->b, leftTop->b);
             }
             this->pixels[pixelY][pixelX] = new PNGImage::RGBColor(r, g, b);
             i = i + 3;  // leidos 3 bytes

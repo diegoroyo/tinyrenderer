@@ -36,5 +36,6 @@ class PNGImage {
     // pixels[y][x] = color del pixel (x, y) de la imagen
     PNGImage::RGBColor*** pixels;
 
+    uint8_t paeth_pred(uint8_t a, uint8_t b, uint8_t c);
     bool read_IDAT_info(int& pixelX, int& pixelY, PNGChunk::IDATInfo* info);
 };
