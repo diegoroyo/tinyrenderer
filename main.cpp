@@ -6,10 +6,10 @@ void imageInfo(PNGImage& image) {
               << std::endl;
     for (int x = 0; x < image.width; x++) {
         for (int y = 0; y < image.height; y++) {
-            std::cout << "Pixel (" << x << ", " << y << "): "
-                      << "r = " << std::hex << int(image.get_pixel(x, y)->r)
-                      << ", g = " << std::hex << int(image.get_pixel(x, y)->g)
-                      << ", b = " << std::hex << int(image.get_pixel(x, y)->b)
+            std::cout << "Pixel (" << (int)x << ", " << (int)y << "): "
+                      << "r = " << int(image.get_pixel(x, y)->r)
+                      << ", g = " << int(image.get_pixel(x, y)->g)
+                      << ", b = " << int(image.get_pixel(x, y)->b)
                       << std::endl;
         }
     }
