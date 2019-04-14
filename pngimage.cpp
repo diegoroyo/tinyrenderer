@@ -11,27 +11,49 @@ PNGImage::PNGImage() : width(0), height(0) {}
 bool PNGImage::read_IDAT_info(int& pixelX, int& pixelY,
                               PNGChunk::IDATInfo* info) {
     int i = 0;
+    int filterType = 0;
     bool readOk = true;
-    while (readOk && i < info->length) {
+    while (readOk && i < info->blockLength) {
         // Cada fila comienza con un byte para indicar tipo de filtro
-        // Solo se soporta tipo = 0 (es decir, sin filtro)
+        // Solo se soporta tipos 0, 1 y 2 (None, Sub y Add)
+        // https://www.w3.org/TR/PNG-Filters.html
         if (pixelX == 0) {
-            if (info->data[i] != 0) {
-                std::cerr << "Error: unsupported filter type" << std::endl;
+            if (info->blockData[i] > 2) {
+                // TODO filtros 3 y 4
+                std::cerr << "Error: unsupported filter type: "
+                          << (int)info->blockData[i]
+                          << " (supported types are None, Sub and Add)"
+                          << std::endl;
                 readOk = false;
             } else {
                 this->pixels[pixelY] = new PNGImage::RGBColor*[this->width];
+                filterType = info->blockData[i];
                 i++;  // leido un byte
             }
         }
         // Leer datos del pixel (r, g, b 3 bytes en ese orden)
-        this->pixels[pixelY][pixelX] = new PNGImage::RGBColor(
-            info->data[i], info->data[i + 1], info->data[i + 2]);
-        i = i + 3;  // leidos 3 bytes
-        pixelX++;
-        if (pixelX == this->width) {
-            pixelX = 0;
-            pixelY++;
+        if (readOk) {
+            uint8_t r = info->blockData[i];
+            uint8_t g = info->blockData[i + 1];
+            uint8_t b = info->blockData[i + 2];
+            if (filterType == 1 && pixelX > 0) {
+                // Sub(x) = Raw(x) - Raw(x-bpp)
+                r ^= this->pixels[pixelY][pixelX - 1]->r;
+                g ^= this->pixels[pixelY][pixelX - 1]->g;
+                b ^= this->pixels[pixelY][pixelX - 1]->b;
+            } else if (filterType == 2 && pixelY > 0) {
+                // Up(x) = Raw(x) - Prior(x)
+                r ^= this->pixels[pixelY - 1][pixelX]->r;
+                g ^= this->pixels[pixelY - 1][pixelX]->g;
+                b ^= this->pixels[pixelY - 1][pixelX]->b;
+            }
+            this->pixels[pixelY][pixelX] = new PNGImage::RGBColor(r, g, b);
+            i = i + 3;  // leidos 3 bytes
+            pixelX++;
+            if (pixelX == this->width) {
+                pixelX = 0;
+                pixelY++;
+            }
         }
     }
     return readOk;
@@ -107,7 +129,7 @@ bool PNGImage::read_png_file(const char* filename) {
                 if (chunk.is_type("IDAT")) {
                     PNGChunk::IDATInfo* info =
                         dynamic_cast<PNGChunk::IDATInfo*>(chunk.chunkInfo);
-                    read_IDAT_info(pixelX, pixelY, info);
+                    isImageOk = read_IDAT_info(pixelX, pixelY, info);
                 } else if (chunk.is_type("IEND")) {
                     endChunkRead = true;
                 } else {
