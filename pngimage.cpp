@@ -143,9 +143,7 @@ bool PNGImage::read_png_file(const char* filename) {
                     dynamic_cast<PNGChunk::IHDRInfo*>(chunk.chunkInfo);
                 // Solo se da soporte a imagenes PNG sencillas (solo color, sin
                 // paletas ni alpha)
-                if (info->compression == 0 && info->filter == 0 &&
-                    info->interlace == 0 && info->colorType == 2 &&
-                    info->bitDepth == 8) {
+                if (info->is_supported()) {
                     this->width = info->width;
                     this->height = info->height;
                     this->pixels = new PNGImage::RGBColor**[this->height];
@@ -179,6 +177,25 @@ bool PNGImage::read_png_file(const char* filename) {
     }
 
     return isImageOk;
+}
+
+// Escribe los chunks mínimos para poder ver la imagen
+// - Chunk IHDR (24 bit RGB, color, sin paletas)
+// - Chunk(s) IDAT (tamaño maximo 8192 bits)
+//   TODO
+bool PNGImage::write_png_file(const char* filename) {
+    std::ofstream os(filename, std::ios::binary);
+    if (!os.is_open()) {
+        std::cerr << "Can't open file " << filename << std::endl;
+        os.close();
+        return false;
+    }
+    // Header archivo PNG
+    os.write((char*)HEADER_SIGNATURE, HEADER_LENGTH);
+    // Chunk IHDR
+    PNGChunk::IHDRInfo infoIHDR(width, height);
+    infoIHDR.write_file(os);
+    // Chunk IDAT
 }
 
 // Devuelve el color del pixel (x, y) de la imagen

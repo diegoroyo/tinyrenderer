@@ -180,6 +180,23 @@ PNGChunk::~PNGChunk() {
     }
 }
 
+PNGChunk::IHDRInfo::IHDRInfo(int _width, int _height)
+    : width(_width),
+      height(_height),
+      bitDepth(IHDR_BIT_DEPTH),
+      colorType(IHDR_COLOR_TYPE),
+      compression(IHDR_COMPRESSION),
+      filter(IHDR_FILTER),
+      interlace(IHDR_INTERLACE) {}
+
+bool PNGChunk::IHDRInfo::is_supported() {
+    return this->bitDepth == IHDR_BIT_DEPTH &&
+           this->colorType == IHDR_COLOR_TYPE &&
+           this->compression == IHDR_COMPRESSION &&
+           this->filter == IHDR_COMPRESSION &&
+           this->interlace == IHDR_INTERLACE;
+}
+
 // Más info:
 // http://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html
 bool PNGChunk::IHDRInfo::read_info(uint8_t* data, uint32_t length) {
@@ -195,6 +212,16 @@ bool PNGChunk::IHDRInfo::read_info(uint8_t* data, uint32_t length) {
     this->filter = data[11];
     this->interlace = data[12];
     return true;
+}
+
+void PNGChunk::IHDRInfo::write_file(std::ofstream& os) {
+    os.write((char*)&this->width, 4);
+    os.write((char*)&this->height, 4);
+    os.write((char*)&this->bitDepth, 1);
+    os.write((char*)&this->colorType, 1);
+    os.write((char*)&this->compression, 1);
+    os.write((char*)&this->filter, 1);
+    os.write((char*)&this->interlace, 1);
 }
 
 // Leer solo la parte de datos y un checksum que solo es valido si este es el
@@ -258,3 +285,5 @@ bool PNGChunk::IDATInfo::read_info(uint8_t* data, uint32_t length) {
 
     return set_data(&data[7], blockLength, length - IDAT_LENGTH_HEADER);
 }
+
+void PNGChunk::IDATInfo::write_file(std::ofstream& os) { ; }

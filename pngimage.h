@@ -1,9 +1,8 @@
+#pragma once
+
 #include <stdint.h>
 #include <cstring>
-
 #include "pngchunk.h"
-
-#pragma once
 
 // Métodos de apoyo para la lectura/escritura de imágenes PNG y su modificación
 // Referencia: https://en.wikipedia.org/wiki/Portable_Network_Graphics
@@ -24,6 +23,7 @@ class PNGImage {
     PNGImage();
     ~PNGImage();
     bool read_png_file(const char* filename);
+    bool write_png_file(const char* filename);
     PNGImage::RGBColor* get_pixel(int x, int y);
     void set_pixel(int x, int y, PNGImage::RGBColor* color);
 

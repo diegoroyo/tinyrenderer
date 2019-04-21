@@ -1,6 +1,6 @@
-#include <stdint.h>
-
 #pragma once
+
+#include <stdint.h>
 
 // Una imagen PNG está formada por varios chunks de este tipo
 // http://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html
@@ -25,6 +25,7 @@ class PNGChunk {
     class ChunkInfo {
        public:
         virtual bool read_info(uint8_t* data, uint32_t length) = 0;
+        virtual void write_file(std::ofstream& os) = 0;
     };
 
     // Información principal de la imagen
@@ -32,12 +33,22 @@ class PNGChunk {
        private:
         // Bytes de información (ver campos públicos)
         static const int IHDR_LENGTH = 13;
+        // Valores soportados
+        static const int IHDR_BIT_DEPTH = 8;
+        static const int IHDR_COLOR_TYPE = 2;
+        static const int IHDR_COMPRESSION = 0;
+        static const int IHDR_FILTER = 0;
+        static const int IHDR_INTERLACE = 0;
 
        public:
         uint32_t width, height;
         uint8_t bitDepth, colorType, compression, filter, interlace;
 
+        IHDRInfo() = default;
+        IHDRInfo(int _width, int _height);
+        bool is_supported();
         bool read_info(uint8_t* data, uint32_t length) override;
+        void write_file(std::ofstream& os) override;
     };
 
     // Datos (colores) de la imagen
@@ -53,9 +64,11 @@ class PNGChunk {
         uint16_t chunkLength;  // solo los de un chunk
         uint32_t checksum;     // solo valido para el ultimo chunk
 
+        IDATInfo() = default;
         bool set_data(uint8_t* data, uint32_t blockLength,
                       uint32_t chunkLength);
         bool read_info(uint8_t* data, uint32_t length) override;
+        void write_file(std::ofstream& os) override;
     };
 
     uint32_t length;
