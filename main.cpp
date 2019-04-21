@@ -1,4 +1,5 @@
 #include <iostream>
+#include "rgbcolor.h"
 #include "pngimage.h"
 
 void imageInfo(PNGImage& image) {
@@ -17,7 +18,7 @@ void imageInfo(PNGImage& image) {
 
 int main() {
     PNGImage img;
-    PNGImage::RGBColor white(255, 255, 255);
+    RGBColor white(255, 255, 255);
     if (img.read_png_file("png/test_tom.png")) {
         // Píxeles de la diagonal en blanco
         for (int i = 0; i < img.width; i++) {

@@ -34,7 +34,7 @@ bool PNGImage::read_IDAT_info(int& pixelX, int& pixelY,
                 std::cerr << "Error: invalid filter type" << std::endl;
                 readOk = false;
             } else {
-                this->pixels[pixelY] = new PNGImage::RGBColor*[this->width];
+                this->pixels[pixelY] = new RGBColor*[this->width];
                 filterType = info->blockData[i];
                 i++;  // leido un byte
             }
@@ -43,7 +43,7 @@ bool PNGImage::read_IDAT_info(int& pixelX, int& pixelY,
         if (readOk) {
             uint16_t r = info->blockData[i], g = info->blockData[i + 1],
                      b = info->blockData[i + 2];
-            PNGImage::RGBColor *left, *top, *leftTop;
+            RGBColor *left, *top, *leftTop;
             if (pixelX > 0) {
                 left = this->pixels[pixelY][pixelX - 1];
                 if (pixelY > 0) {
@@ -75,7 +75,7 @@ bool PNGImage::read_IDAT_info(int& pixelX, int& pixelY,
                 g += paeth_pred(left->g, top->g, leftTop->g);
                 b += paeth_pred(left->b, top->b, leftTop->b);
             }
-            this->pixels[pixelY][pixelX] = new PNGImage::RGBColor(r, g, b);
+            this->pixels[pixelY][pixelX] = new RGBColor(r, g, b);
             i = i + 3;  // leidos 3 bytes
             pixelX++;
             if (pixelX == this->width) {
@@ -146,7 +146,7 @@ bool PNGImage::read_png_file(const char* filename) {
                 if (info->is_supported()) {
                     this->width = info->width;
                     this->height = info->height;
-                    this->pixels = new PNGImage::RGBColor**[this->height];
+                    this->pixels = new RGBColor**[this->height];
                     headerChunkRead = true;
                 } else {
                     isImageOk = false;
@@ -200,7 +200,7 @@ bool PNGImage::write_png_file(const char* filename) {
 
 // Devuelve el color del pixel (x, y) de la imagen
 // o bien nullptr si se sale de la cuadrícula
-PNGImage::RGBColor* PNGImage::get_pixel(int x, int y) {
+RGBColor* PNGImage::get_pixel(int x, int y) {
     if (x >= 0 && x < this->width && y >= 0 && y < this->height) {
         return pixels[y][x];
     } else {
@@ -210,7 +210,7 @@ PNGImage::RGBColor* PNGImage::get_pixel(int x, int y) {
 
 // Si las coordenadas (x, y) pertenecen a la foto (no se salen),
 // modifica el color de dicho pixel
-void PNGImage::set_pixel(int x, int y, PNGImage::RGBColor* color) {
+void PNGImage::set_pixel(int x, int y, RGBColor* color) {
     if (x >= 0 && x < this->width && y >= 0 && y < this->height) {
         pixels[y][x] = color;
     }
