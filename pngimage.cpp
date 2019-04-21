@@ -191,6 +191,14 @@ PNGImage::RGBColor* PNGImage::get_pixel(int x, int y) {
     }
 }
 
+// Si las coordenadas (x, y) pertenecen a la foto (no se salen),
+// modifica el color de dicho pixel
+void PNGImage::set_pixel(int x, int y, PNGImage::RGBColor* color) {
+    if (x >= 0 && x < this->width && y >= 0 && y < this->height) {
+        pixels[y][x] = color;
+    }
+}
+
 PNGImage::~PNGImage() {
     for (int h = 0; h < this->height; h++) {
         for (int w = 0; w < this->width; w++) {
