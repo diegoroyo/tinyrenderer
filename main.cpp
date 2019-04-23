@@ -1,3 +1,4 @@
+#include <math.h>
 #include <iostream>
 #include "pngimage.h"
 #include "rgbcolor.h"
@@ -10,14 +11,14 @@ void imageInfo(PNGImage& image) {
         for (int x = 0; x < image.width; x++) {
             image.get_pixel(x, y, pixel);
             std::cout << "Pixel (" << (int)x << ", " << (int)y << "): "
-                      << "r = " << int(pixel.r)
-                      << ", g = " << int(pixel.g)
+                      << "r = " << int(pixel.r) << ", g = " << int(pixel.g)
                       << ", b = " << int(pixel.b) << std::endl;
         }
     }
 }
 
 int main() {
+    /*
     PNGImage img;
     if (img.read_png_file("png/test_tom.png")) {
         // Mostrar información
@@ -30,6 +31,19 @@ int main() {
     } else {
         std::cout << "Error al leer la imagen" << std::endl;
     }
+    */
+
+    RGBColor grey(200, 200, 200);
+    PNGImage img(100, 10, grey);
+    for (int x = 0; x < img.width; x++) {
+        for (int y = 0; y < img.height; y++) {
+            double v = 5.0 * sin(x / 5.0) + 5.0;
+            if (v > y && v < y + 1) {
+                img.set_pixel(x, y, RGBColor::Red);
+            }
+        }
+    }
+    img.write_png_file("png/sin_graph.png");
 
     return 0;
 }

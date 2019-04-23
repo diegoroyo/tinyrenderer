@@ -4,7 +4,19 @@
 #include "pngchunk.h"
 #include "pngimage.h"
 
-PNGImage::PNGImage() : width(0), height(0) {}
+PNGImage::PNGImage() : width(0), height(0), pixels(nullptr) {}
+
+PNGImage::PNGImage(int width, int height, const RGBColor& backgroundColor) {
+    this->width = width;
+    this->height = height;
+    this->pixels = new RGBColor**[height];
+    for (int h = 0; h < height; h++) {
+        this->pixels[h] = new RGBColor*[width];
+        for (int w = 0; w < width; w++) {
+            this->pixels[h][w] = new RGBColor(backgroundColor);
+        }
+    }
+}
 
 bool PNGImage::read_png_file(const char* filename) {
     std::ifstream is(filename, std::ios::binary);
