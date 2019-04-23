@@ -4,7 +4,7 @@ OpenGL clone for image rendering, which writes its output to a PNG file. Based o
 
 ## About PNG images
 
-The referenced tutorial uses TGA images (see files `tgaimage.cpp` and `tgafile.h`) for the rendering results. This version uses PNG images for this purpose (see files `pngimage.cpp` and `pngimage.h`, which use `pngchunk.cpp` and `pngchunk.h` to work).
+The referenced tutorial uses TGA images (see files `tgaimage.cpp` and `tgafile.h`) for the rendering results. This version uses PNG images for this purpose (see `pngimage`, which uses `pngchunk` and `rgbcolor` to work).
 
 ### `pngimage`: Basic PNG image library with load/save operations
 
@@ -17,6 +17,6 @@ More info about the process of loading/saving an image and the needed calculatio
 bool read_png_file(const char* filename);
 bool write_png_file(const char* filename);
 /* Modify pixel data */
-PNGImage::RGBColor* get_pixel(int x, int y);
-void set_pixel(int x, int y, PNGImage::RGBColor* color);
+bool get_pixel(int x, int y, RGBColor& color);
+void set_pixel(int x, int y, const RGBColor& color);
 ```
