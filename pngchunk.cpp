@@ -7,21 +7,17 @@
 
 uint32_t PNGChunk::CRC_TABLE[256];
 
-// Corregir el valor leido en el archivo .png (Big Endian)
-uint32_t swap_bytes(uint8_t* read) {
+// Convierte de Big Endian (archivo .png) al local de la máquina
+uint32_t read_endian(uint8_t* read) {
     return read[3] | read[2] << 8 | read[1] << 16 | read[0] << 24;
 }
 
-// Cálculo del checksum Adler-32:
-// https://en.wikipedia.org/wiki/Adler-32
-uint32_t PNGChunk::adler_checksum(uint8_t* data, uint32_t length) {
-    int a = 1;
-    int b = 0;
-    for (int i = 0; i < length; i++) {
-        a = (a + data[i]) % ADLER_MODULO;
-        b = (b + a) % ADLER_MODULO;
-    }
-    return b * 65536 + a;
+// Convierte del local de la máquina a Big Endian (archivo .png)
+void write_endian(uint32_t value, uint8_t* write) {
+    write[0] = value >> 24 & 0xFF;
+    write[1] = value >> 16 & 0xFF;
+    write[2] = value >> 8 & 0xFF;
+    write[3] = value & 0xFF;
 }
 
 // Cálculo del CRC de 32 bits de un chunk de la imágen PNG
@@ -40,9 +36,17 @@ uint32_t PNGChunk::calculate_crc(uint8_t* stream, int streamLength) {
     return rem ^ 0xFFFFFFFF;
 }
 
-// Constructor (crear tabla para el cálculo de CRC si es necesario)
-PNGChunk::PNGChunk()
-    : length(0), chunkType(nullptr), data(nullptr), crc(0), chunkInfo(nullptr) {
+// Constructor sin chunkInfo
+PNGChunk::PNGChunk() : PNGChunk(nullptr) {}
+
+// Crear tabla para el cálculo de CRC si es necesario
+PNGChunk::PNGChunk(ChunkInfo* _chunkInfo)
+    : chunkCrcDividend(nullptr),
+      length(0),
+      chunkType(nullptr),
+      data(nullptr),
+      crc(0),
+      chunkInfo(_chunkInfo) {
     static bool crcTableCalculated = false;
     if (!crcTableCalculated) {
         for (int i = 0; i < 256; i++) {
@@ -70,7 +74,7 @@ bool PNGChunk::read_data(std::ifstream& is) {
     // Longitud (4 bytes)
     uint8_t length_aux[4];
     is.read((char*)length_aux, 4);
-    this->length = swap_bytes(length_aux);
+    this->length = read_endian(length_aux);
 
     // Tipo y datos (4 bytes)
     this->chunkCrcDividend = new uint8_t[length + 4];
@@ -81,7 +85,7 @@ bool PNGChunk::read_data(std::ifstream& is) {
     // CRC
     uint8_t crc_aux[4];
     is.read((char*)crc_aux, 4);
-    this->crc = swap_bytes(crc_aux);
+    this->crc = read_endian(crc_aux);
 
     // Comprobar CRC correcto
     uint32_t calc_crc = calculate_crc(this->chunkCrcDividend, this->length + 4);
@@ -152,7 +156,8 @@ bool PNGChunk::read_file(std::ifstream& is) {
         }
         if (isChunkOk) {
             // Comprobar el checksum del bloque IDAT entero (todos los chunks)
-            uint32_t calc = adler_checksum(info->blockData, info->blockLength);
+            uint32_t calc =
+                info->adler_checksum(info->blockData, info->blockLength);
             if (info->checksum != calc) {
                 std::cerr << "Invalid IDAT block checksum" << std::endl;
                 return false;
@@ -166,6 +171,27 @@ bool PNGChunk::read_file(std::ifstream& is) {
     }
 }
 
+bool PNGChunk::write_file(std::ofstream& os) {
+    if (this->chunkInfo == nullptr) {
+        std::cerr << "Attempted to write to file without data" << std::endl;
+        return false;
+    }
+    uint8_t* data;
+    uint32_t dataLength;
+    // Comprobar información correcta (al menos 8 bytes)
+    if (!chunkInfo->get_writable_info(data, dataLength) || dataLength < 8) {
+        return false;
+    }
+    os.write((char*)data, dataLength);
+    // Calcular CRC de los datos sin length
+    uint32_t calc_crc = calculate_crc(&data[4], dataLength - 4);
+    uint8_t endian_crc[4];
+    write_endian(calc_crc, endian_crc);
+    os.write((char*)&endian_crc, 4);
+    delete[] data;  // ya no se emplea
+    return true;
+}
+
 // Comprobación del tipo de chunk
 bool PNGChunk::is_type(const char* type) {
     // paso a string para añadir terminación
@@ -174,8 +200,10 @@ bool PNGChunk::is_type(const char* type) {
 }
 
 PNGChunk::~PNGChunk() {
-    delete[] this->chunkCrcDividend;
-    if (chunkInfo) {
+    if (this->chunkCrcDividend) {
+        delete[] this->chunkCrcDividend;
+    }
+    if (this->chunkInfo) {
         delete this->chunkInfo;
     }
 }
@@ -204,8 +232,8 @@ bool PNGChunk::IHDRInfo::read_info(uint8_t* data, uint32_t length) {
         std::cerr << "IHDR chunk has wrong length" << std::endl;
         return false;
     }
-    this->width = swap_bytes(data);
-    this->height = swap_bytes(&data[4]);
+    this->width = read_endian(data);
+    this->height = read_endian(&data[4]);
     this->bitDepth = data[8];
     this->colorType = data[9];
     this->compression = data[10];
@@ -214,14 +242,143 @@ bool PNGChunk::IHDRInfo::read_info(uint8_t* data, uint32_t length) {
     return true;
 }
 
-void PNGChunk::IHDRInfo::write_file(std::ofstream& os) {
-    os.write((char*)&this->width, 4);
-    os.write((char*)&this->height, 4);
-    os.write((char*)&this->bitDepth, 1);
-    os.write((char*)&this->colorType, 1);
-    os.write((char*)&this->compression, 1);
-    os.write((char*)&this->filter, 1);
-    os.write((char*)&this->interlace, 1);
+bool PNGChunk::IHDRInfo::get_writable_info(uint8_t*& data, uint32_t& length) {
+    length = IHDR_LENGTH + 8;    // 8 bytes (4 length + 4 type)
+    data = new uint8_t[length];  // borrado en write_file
+    write_endian(IHDR_LENGTH, data);
+    memcpy(&data[4], &"IHDR", 4);
+    write_endian(this->width, &data[8]);
+    write_endian(this->height, &data[12]);
+    data[16] = this->bitDepth;
+    data[17] = this->colorType;
+    data[18] = this->compression;
+    data[19] = this->filter;
+    data[20] = this->interlace;
+    return true;
+}
+
+PNGChunk::IDATInfo::IDATInfo(int width, int height, RGBColor*** pixels)
+    : pixelData(pixels) {
+    // 24 bits per pixel RGB + tipo de filtro al inicio de cada fila
+    uint16_t pixelLength = (3 * width + 1) * height;
+    // Añadir cabecera
+    this->blockLength = IDAT_LENGTH_HEADER + pixelLength + IDAT_LENGTH_CHECKSUM;
+    this->blockData = new uint8_t[this->blockLength];
+    // ZLIB Header
+    this->blockData[0] = IDAT_ZLIB_HEADER >> 8 & 0xFF;
+    this->blockData[1] = IDAT_ZLIB_HEADER & 0xFF;
+    // Block header
+    this->blockData[2] = IDAT_BLOCK_HEADER;
+    // Longitud y su invertido Ca1
+    this->blockData[3] = pixelLength & 0xFF;
+    this->blockData[4] = pixelLength >> 8 & 0xFF;
+    this->blockData[5] = ~pixelLength & 0xFF;
+    this->blockData[6] = ~pixelLength >> 8 & 0xFF;
+    int i = 7;  // posición de pixel
+    for (int y = 0; y < height; y++) {
+        blockData[i++] = 0;  // tipo de filtro 0 (sin filtro)
+        for (int x = 0; x < width; x++) {
+            blockData[i++] = pixels[y][x]->r;
+            blockData[i++] = pixels[y][x]->g;
+            blockData[i++] = pixels[y][x]->b;
+        }
+    }
+    write_endian(adler_checksum(&this->blockData[7], pixelLength),
+                 &this->blockData[this->blockLength - 4]);
+}
+
+// Cálculo del checksum Adler-32:
+// https://en.wikipedia.org/wiki/Adler-32
+uint32_t PNGChunk::IDATInfo::adler_checksum(uint8_t* data, uint32_t length) {
+    int a = 1;
+    int b = 0;
+    for (int i = 0; i < length; i++) {
+        a = (a + data[i]) % ADLER_MODULO;
+        b = (b + a) % ADLER_MODULO;
+    }
+    return b * 65536 + a;
+}
+
+// Modo de filtrado #4, mira los pixeles a la izquierda y derecha
+// a: izquierda, b: arriba, c: arriba a la izquierda
+uint8_t PNGChunk::IDATInfo::paeth_pred(uint8_t a, uint8_t b, uint8_t c) {
+    int p = a + b - c;                    // estimación inicial
+    int pa = p - a >= 0 ? p - a : a - p;  // abs(p - a)
+    int pb = p - b >= 0 ? p - b : b - p;  // abs(p - b)
+    int pc = p - c >= 0 ? p - c : c - p;  // abs(p - c)
+    // devolver más cercano a a, b, c
+    // en caso de empate, a > b > c
+    return pa <= pb && pa <= pc ? a : (pb <= pc ? b : c);
+}
+
+// Datos descomprimidos de un chunk IDAT, añadir a la imagen
+// https://stackoverflow.com/questions/49017937/png-decompressed-idat-chunk-how-to-read
+bool PNGChunk::IDATInfo::process_pixels(int width, int height) {
+    int i = 0;                   // posición de memoria apuntada
+    int pixelX = 0, pixelY = 0;  // pixeles X, Y apuntados
+    int filterType = 0;          // tipo de filtro para la fila en curso
+    bool readOk = true;
+    RGBColor blackPixel(0, 0, 0);  // TODO usar constantes de RGBColor
+    this->pixelData = new RGBColor**[height];
+    while (readOk && i < this->blockLength) {
+        // Cada fila comienza con un byte para indicar tipo de filtro
+        // Solo se soporta tipos 0, 1 y 2 (None, Sub y Add)
+        // https://www.w3.org/TR/PNG-Filters.html
+        if (pixelX == 0) {
+            if (this->blockData[i] > 4) {
+                std::cerr << "Error: invalid filter type" << std::endl;
+                readOk = false;
+            } else {
+                this->pixelData[pixelY] = new RGBColor*[width];
+                filterType = this->blockData[i];
+                i++;  // leido un byte
+            }
+        }
+        // Leer datos del pixel (r, g, b 3 bytes en ese orden)
+        if (readOk) {
+            uint8_t r = this->blockData[i], g = this->blockData[i + 1],
+                    b = this->blockData[i + 2];
+            const RGBColor *left, *top, *leftTop;
+            left =
+                pixelX > 0 ? this->pixelData[pixelY][pixelX - 1] : &blackPixel;
+            top =
+                pixelY > 0 ? this->pixelData[pixelY - 1][pixelX] : &blackPixel;
+            leftTop = pixelX > 0 && pixelY > 0
+                          ? this->pixelData[pixelY - 1][pixelX - 1]
+                          : &blackPixel;
+            switch (filterType) {
+                case 1:  // Sub(x) = Raw(x) - Raw(x-bpp)
+                    r += left->r;
+                    g += left->g;
+                    b += left->b;
+                    break;
+                case 2:  // Up(x) = Raw(x) - Prior(x)
+                    r += top->r;
+                    g += top->g;
+                    b += top->b;
+                    break;
+                case 3:  // Average(x) = Raw(x) - floor((Raw(x-bpp)+Prior(x))/2)
+                    r += (left->r + top->r) / 2;
+                    g += (left->g + top->g) / 2;
+                    b += (left->b + top->b) / 2;
+                    break;
+                case 4:  // Paeth(x) = Raw(x) - PaethPredictor(Raw(x-bpp),
+                         //                        Prior(x), Prior(x-bpp))
+                    r += paeth_pred(left->r, top->r, leftTop->r);
+                    g += paeth_pred(left->g, top->g, leftTop->g);
+                    b += paeth_pred(left->b, top->b, leftTop->b);
+                    break;
+            }
+            this->pixelData[pixelY][pixelX] = new RGBColor(r, g, b);
+            i = i + 3;  // leidos 3 bytes
+            pixelX++;
+            if (pixelX == width) {
+                pixelX = 0;
+                pixelY++;
+            }
+        }
+    }
+    return readOk;
 }
 
 // Leer solo la parte de datos y un checksum que solo es valido si este es el
@@ -241,7 +398,7 @@ bool PNGChunk::IDATInfo::set_data(uint8_t* data, uint32_t blockLength,
     } else {
         this->chunkLength = chunkLength;
     }
-    this->checksum = swap_bytes(&data[chunkLength - 4]);
+    this->checksum = read_endian(&data[chunkLength - 4]);
     return true;
 }
 
@@ -261,7 +418,8 @@ bool PNGChunk::IDATInfo::read_info(uint8_t* data, uint32_t length) {
         return false;
     }
     // Comprobar que CM = 8, FLEVEL = 0 y FDICT = 0
-    if (static_cast<uint16_t>(compressionHeader & 0x0FE0) != 0x0800) {
+    if (static_cast<uint16_t>(compressionHeader & 0x0FE0) != IDAT_ZLIB_HEADER &
+        0x0FE0) {
         std::cerr << "Unsupported IDAT chunk compression type" << std::endl;
         return false;
     }
@@ -270,7 +428,7 @@ bool PNGChunk::IDATInfo::read_info(uint8_t* data, uint32_t length) {
     uint8_t blockHeader = data[2];
     // Un bloque (BFINAL = 1) sin comprimir (BTYPE = 00), el resto del byte
     // no contiene información (todo 0)
-    if (blockHeader != 0x01) {
+    if (blockHeader != IDAT_BLOCK_HEADER) {
         std::cerr << "Unsupported IDAT block type" << std::endl;
         return false;
     }
@@ -286,4 +444,25 @@ bool PNGChunk::IDATInfo::read_info(uint8_t* data, uint32_t length) {
     return set_data(&data[7], blockLength, length - IDAT_LENGTH_HEADER);
 }
 
-void PNGChunk::IDATInfo::write_file(std::ofstream& os) { ; }
+bool PNGChunk::IDATInfo::get_writable_info(uint8_t*& data, uint32_t& length) {
+    length = this->blockLength + 8;
+    data = new uint8_t[length];
+    write_endian(this->blockLength, data);
+    memcpy(&data[4], &"IDAT", 4);
+    // Copiar y borrar no es la opción más rápida, pero es simple
+    memcpy(&data[8], this->blockData, this->blockLength);
+    delete[] this->blockData;
+    return true;
+}
+
+bool PNGChunk::IENDInfo::read_info(uint8_t* data, uint32_t length) {
+    return true;
+}
+
+bool PNGChunk::IENDInfo::get_writable_info(uint8_t*& data, uint32_t& length) {
+    length = 8;                  // 8 bytes (4 length + 4 type)
+    data = new uint8_t[length];  // borrado en write_file
+    write_endian(0, data);
+    memcpy(&data[4], &"IEND", 4);
+    return true;
+}

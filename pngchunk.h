@@ -12,12 +12,10 @@
 //   4 bytes: CRC
 class PNGChunk {
    private:
-    static const int ADLER_MODULO = 65521;             // ver adler_checksum
     static const uint32_t CRC32_DIVISOR = 0xEDB88320;  // ver calculate_crc
     static uint32_t CRC_TABLE[256];
     uint8_t* chunkCrcDividend;
 
-    uint32_t adler_checksum(uint8_t* data, uint32_t length);
     uint32_t calculate_crc(uint8_t* stream, int streamLength);
     bool read_data(std::ifstream& is);
 
@@ -26,7 +24,7 @@ class PNGChunk {
     class ChunkInfo {
        public:
         virtual bool read_info(uint8_t* data, uint32_t length) = 0;
-        virtual void write_file(std::ofstream& os) = 0;
+        virtual bool get_writable_info(uint8_t*& data, uint32_t& length) = 0;
     };
 
     // Información principal de la imagen
@@ -49,11 +47,20 @@ class PNGChunk {
         IHDRInfo(int _width, int _height);
         bool is_supported();
         bool read_info(uint8_t* data, uint32_t length) override;
-        void write_file(std::ofstream& os) override;
+        bool get_writable_info(uint8_t*& data, uint32_t& length) override;
     };
 
     // Datos (colores) de la imagen
     class IDATInfo : public ChunkInfo {
+       private:
+        // CINF = 0, CM = 8, FLEVEL = FDICT = 0, FCHECK = 1D (mult. 31)
+        static const uint16_t IDAT_ZLIB_HEADER = 0x081D;
+        // Last block marker 1, block type 00 (menor a mayor peso)
+        static const uint8_t IDAT_BLOCK_HEADER = 0x01;
+        static const int ADLER_MODULO = 65521;  // ver adler_checksum
+
+        uint8_t paeth_pred(uint8_t a, uint8_t b, uint8_t c);
+
        public:
         // Tamaño mínimo (headers sin datos)
         // 2 header + 5 block header | 4 block length
@@ -64,12 +71,22 @@ class PNGChunk {
         uint16_t blockLength;  // todos los datos IDAT
         uint16_t chunkLength;  // solo los de un chunk
         uint32_t checksum;     // solo valido para el ultimo chunk
+        RGBColor*** pixelData;
 
         IDATInfo() = default;
+        IDATInfo(int width, int height, RGBColor*** pixels);
+        uint32_t adler_checksum(uint8_t* data, uint32_t length);
+        bool process_pixels(int width, int height);
         bool set_data(uint8_t* data, uint32_t blockLength,
                       uint32_t chunkLength);
         bool read_info(uint8_t* data, uint32_t length) override;
-        void write_file(std::ofstream& os) override;
+        bool get_writable_info(uint8_t*& data, uint32_t& length) override;
+    };
+
+    class IENDInfo : public ChunkInfo {
+       public:
+        bool read_info(uint8_t* data, uint32_t length) override;
+        bool get_writable_info(uint8_t*& data, uint32_t& length) override;
     };
 
     uint32_t length;
@@ -79,8 +96,10 @@ class PNGChunk {
     ChunkInfo* chunkInfo;
 
     PNGChunk();
+    PNGChunk(ChunkInfo* _chunkInfo);
     ~PNGChunk();
 
     bool read_file(std::ifstream& is);
+    bool write_file(std::ofstream& os);
     bool is_type(const char* type);
 };

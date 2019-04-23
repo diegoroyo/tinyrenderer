@@ -2,8 +2,8 @@
 
 #include <stdint.h>
 #include <cstring>
-#include "rgbcolor.h"
 #include "pngchunk.h"
+#include "rgbcolor.h"
 
 // Métodos de apoyo para la lectura/escritura de imágenes PNG y su modificación
 // Referencia: https://en.wikipedia.org/wiki/Portable_Network_Graphics
@@ -30,7 +30,4 @@ class PNGImage {
 
     // pixels[y][x] = color del pixel (x, y) de la imagen
     RGBColor*** pixels;
-
-    uint8_t paeth_pred(uint8_t a, uint8_t b, uint8_t c);
-    bool read_IDAT_info(int& pixelX, int& pixelY, PNGChunk::IDATInfo* info);
 };
