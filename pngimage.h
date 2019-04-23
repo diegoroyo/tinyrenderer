@@ -18,8 +18,8 @@ class PNGImage {
     ~PNGImage();
     bool read_png_file(const char* filename);
     bool write_png_file(const char* filename);
-    RGBColor* get_pixel(int x, int y);
-    void set_pixel(int x, int y, RGBColor* color);
+    bool get_pixel(int x, int y, RGBColor& color);
+    void set_pixel(int x, int y, const RGBColor& color);
 
    private:
     // Todos los archivos PNG tienen comienzan con estos 8 bytes (ver

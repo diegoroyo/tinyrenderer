@@ -142,21 +142,22 @@ bool PNGImage::write_png_file(const char* filename) {
     return true;
 }
 
-// Devuelve el color del pixel (x, y) de la imagen
-// o bien nullptr si se sale de la cuadrícula
-RGBColor* PNGImage::get_pixel(int x, int y) {
+// Si devuelve true, color toma el valor del pixel
+// en la posicion (x, y) de la imagen
+bool PNGImage::get_pixel(int x, int y, RGBColor& color) {
     if (x >= 0 && x < this->width && y >= 0 && y < this->height) {
-        return pixels[y][x];
+        color.set_values(*pixels[y][x]);
+        return true;
     } else {
-        return nullptr;
+        return false;
     }
 }
 
 // Si las coordenadas (x, y) pertenecen a la foto (no se salen),
 // modifica el color de dicho pixel
-void PNGImage::set_pixel(int x, int y, RGBColor* color) {
+void PNGImage::set_pixel(int x, int y, const RGBColor& color) {
     if (x >= 0 && x < this->width && y >= 0 && y < this->height) {
-        pixels[y][x] = color;
+        pixels[y][x] = new RGBColor(color);
     }
 }
 

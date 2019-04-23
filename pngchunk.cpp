@@ -318,7 +318,6 @@ bool PNGChunk::IDATInfo::process_pixels(int width, int height) {
     int pixelX = 0, pixelY = 0;  // pixeles X, Y apuntados
     int filterType = 0;          // tipo de filtro para la fila en curso
     bool readOk = true;
-    RGBColor blackPixel(0, 0, 0);  // TODO usar constantes de RGBColor
     this->pixelData = new RGBColor**[height];
     while (readOk && i < this->blockLength) {
         // Cada fila comienza con un byte para indicar tipo de filtro
@@ -339,13 +338,13 @@ bool PNGChunk::IDATInfo::process_pixels(int width, int height) {
             uint8_t r = this->blockData[i], g = this->blockData[i + 1],
                     b = this->blockData[i + 2];
             const RGBColor *left, *top, *leftTop;
-            left =
-                pixelX > 0 ? this->pixelData[pixelY][pixelX - 1] : &blackPixel;
-            top =
-                pixelY > 0 ? this->pixelData[pixelY - 1][pixelX] : &blackPixel;
+            left = pixelX > 0 ? this->pixelData[pixelY][pixelX - 1]
+                              : &RGBColor::Black;
+            top = pixelY > 0 ? this->pixelData[pixelY - 1][pixelX]
+                             : &RGBColor::Black;
             leftTop = pixelX > 0 && pixelY > 0
                           ? this->pixelData[pixelY - 1][pixelX - 1]
-                          : &blackPixel;
+                          : &RGBColor::Black;
             switch (filterType) {
                 case 1:  // Sub(x) = Raw(x) - Raw(x-bpp)
                     r += left->r;
