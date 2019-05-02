@@ -33,6 +33,7 @@ int main() {
     }
     */
 
+    /*
     RGBColor grey(200, 200, 200);
     PNGImage img(100, 10, grey);
     for (int x = 0; x < img.width; x++) {
@@ -44,6 +45,16 @@ int main() {
         }
     }
     img.write_png_file("png/sin_graph.png");
+    */
+
+    PNGImage img(500, 500, RGBColor::White);
+    for (int y = 0; y < img.height; y++) {
+        for (int x = 0; x < img.width; x++) {
+            RGBColor color(y * 255 / img.height, x * 255 / img.width, 0);
+            img.set_pixel(x, y, color);
+        }
+    }
+    img.write_png_file("png/gradient.png");
 
     return 0;
 }
