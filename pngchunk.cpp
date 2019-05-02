@@ -112,9 +112,8 @@ bool PNGChunk::read_file(std::ifstream& is) {
         return this->chunkInfo->read_info(this->data, this->length);
 
     } else if (this->is_type("IDAT")) {
-        this->chunkInfo = new PNGChunk::IDATInfo();
-        PNGChunk::IDATInfo* info =
-            dynamic_cast<PNGChunk::IDATInfo*>(this->chunkInfo);
+        PNGChunk::IDATInfo* info = new PNGChunk::IDATInfo();
+        this->chunkInfo = info;
         isChunkOk = info->read_info(this->data, this->length);
         if (!isChunkOk) {
             return false;
@@ -439,13 +438,13 @@ bool PNGChunk::IDATInfo::read_info(uint8_t* data, uint32_t length) {
     // Cabecera (2 bytes)
     uint16_t compressionHeader = data[0] << 8 | data[1];
     if (compressionHeader % 31 != 0) {
-        std::cerr << "IDAT chunk has invalid CHECK bits" << std::endl;
+        std::cerr << "ZLIB header has invalid CHECK bits" << std::endl;
         return false;
     }
     // Comprobar que CM = 8, FLEVEL = 0 y FDICT = 0
     if (static_cast<uint16_t>(compressionHeader & 0x0FE0) != IDAT_ZLIB_HEADER &
         0x0FE0) {
-        std::cerr << "Unsupported IDAT chunk compression type" << std::endl;
+        std::cerr << "Unsupported ZLIB compression type" << std::endl;
         return false;
     }
 
@@ -453,8 +452,8 @@ bool PNGChunk::IDATInfo::read_info(uint8_t* data, uint32_t length) {
     uint8_t blockHeader = data[2];
     // Un bloque (BFINAL = 1) sin comprimir (BTYPE = 00), el resto del byte
     // no contiene información (todo 0)
-    if (blockHeader != IDAT_BLOCK_HEADER | IDAT_BLOCK_LAST) {
-        std::cerr << "Unsupported IDAT block type" << std::endl;
+    if (blockHeader != (IDAT_BLOCK_HEADER | IDAT_BLOCK_LAST)) {
+        std::cerr << "Unsupported DEFLATE block type" << std::endl;
         return false;
     }
 
@@ -462,7 +461,7 @@ bool PNGChunk::IDATInfo::read_info(uint8_t* data, uint32_t length) {
     uint16_t blockLength = data[4] << 8 | data[3];
     uint16_t invertedLength = data[6] << 8 | data[5];
     if (blockLength & invertedLength != 0) {
-        std::cerr << "Invalid IDAT block length" << std::endl;
+        std::cerr << "Invalid DEFLATE block length" << std::endl;
         return false;
     }
 
