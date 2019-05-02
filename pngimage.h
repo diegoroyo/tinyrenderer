@@ -15,7 +15,8 @@ class PNGImage {
     int height;
 
     PNGImage();
-    PNGImage(int width, int height, const RGBColor& backgroundColor);
+    PNGImage(int width, int height,
+             const RGBColor& backgroundColor = RGBColor::White);
     ~PNGImage();
     bool read_png_file(const char* filename);
     bool write_png_file(const char* filename);
