@@ -260,31 +260,57 @@ bool PNGChunk::IHDRInfo::get_writable_info(uint8_t*& data, uint32_t& length) {
 PNGChunk::IDATInfo::IDATInfo(int width, int height, RGBColor*** pixels)
     : pixelData(pixels) {
     // 24 bits per pixel RGB + tipo de filtro al inicio de cada fila
-    uint16_t pixelLength = (3 * width + 1) * height;
-    // Añadir cabecera
-    this->blockLength = IDAT_LENGTH_HEADER + pixelLength + IDAT_LENGTH_CHECKSUM;
+    int pixelLength = (3 * width + 1) * height;
+    // Calcular tamaño total (varios bloques)
+    int numBlocks = 1 + (pixelLength / MAX_BLOCK);
+    int totalLength = pixelLength + IDAT_LENGTH_ZLIB +
+                      numBlocks * IDAT_LENGTH_BLOCK + IDAT_LENGTH_CHECKSUM;
+    this->blockLength = totalLength;
     this->blockData = new uint8_t[this->blockLength];
-    // ZLIB Header
-    this->blockData[0] = IDAT_ZLIB_HEADER >> 8 & 0xFF;
-    this->blockData[1] = IDAT_ZLIB_HEADER & 0xFF;
-    // Block header
-    this->blockData[2] = IDAT_BLOCK_HEADER;
-    // Longitud y su invertido Ca1
-    this->blockData[3] = pixelLength & 0xFF;
-    this->blockData[4] = pixelLength >> 8 & 0xFF;
-    this->blockData[5] = ~pixelLength & 0xFF;
-    this->blockData[6] = ~pixelLength >> 8 & 0xFF;
-    int i = 7;  // posición de pixel
+    // Calcular datos de pixeles (uso de 'new' para imagenes grandes)
+    uint8_t* rawPixelData = new uint8_t[pixelLength];
+    int pixelPos = 0;  // posicion en rawPixelData
     for (int y = 0; y < height; y++) {
-        blockData[i++] = 0;  // tipo de filtro 0 (sin filtro)
+        rawPixelData[pixelPos++] = 0;  // tipo de filtro 0 (sin filtro)
         for (int x = 0; x < width; x++) {
-            blockData[i++] = pixels[y][x]->r;
-            blockData[i++] = pixels[y][x]->g;
-            blockData[i++] = pixels[y][x]->b;
+            rawPixelData[pixelPos++] = pixels[y][x]->r;
+            rawPixelData[pixelPos++] = pixels[y][x]->g;
+            rawPixelData[pixelPos++] = pixels[y][x]->b;
         }
     }
-    write_endian(adler_checksum(&this->blockData[7], pixelLength),
-                 &this->blockData[this->blockLength - 4]);
+    // Escribir pixels en bloques
+    pixelPos = 0;
+    int blockPos = 0;
+    int remainingLength = pixelLength;
+    // ZLIB Header
+    this->blockData[blockPos++] = IDAT_ZLIB_HEADER >> 8 & 0xFF;
+    this->blockData[blockPos++] = IDAT_ZLIB_HEADER & 0xFF;
+    while (remainingLength > 0) {
+        uint16_t checksumLength;
+        // Block header
+        if (remainingLength > MAX_BLOCK) {
+            this->blockData[blockPos++] = IDAT_BLOCK_HEADER;
+            checksumLength = MAX_BLOCK;
+        } else {
+            this->blockData[blockPos++] = IDAT_BLOCK_HEADER | IDAT_BLOCK_LAST;
+            checksumLength = remainingLength;
+        }
+        // Longitud y su invertido Ca1 (máximo)
+        this->blockData[blockPos++] = checksumLength & 0xFF;
+        this->blockData[blockPos++] = checksumLength >> 8 & 0xFF;
+        this->blockData[blockPos++] = ~checksumLength & 0xFF;
+        this->blockData[blockPos++] = ~checksumLength >> 8 & 0xFF;
+        // Datos de pixeles
+        memcpy(&this->blockData[blockPos], &rawPixelData[pixelPos],
+               checksumLength);
+        pixelPos += checksumLength;
+        blockPos += checksumLength;
+        remainingLength -= checksumLength;
+    }
+    // Checksum
+    write_endian(adler_checksum(rawPixelData, pixelLength),
+                 &this->blockData[blockPos]);
+    delete[] rawPixelData;  // ya no se usa
 }
 
 // Cálculo del checksum Adler-32:
@@ -405,7 +431,7 @@ bool PNGChunk::IDATInfo::set_data(uint8_t* data, uint32_t blockLength,
 // https://stackoverflow.com/questions/33535388/deflate-compression-spec-clarifications
 // https://github.com/libyal/assorted/blob/master/documentation/Deflate%20(zlib)%20compressed%20data%20format.asciidoc
 bool PNGChunk::IDATInfo::read_info(uint8_t* data, uint32_t length) {
-    if (length < IDAT_LENGTH_HEADER) {
+    if (length < IDAT_LENGTH_ZLIB + IDAT_LENGTH_BLOCK) {
         std::cerr << "IDAT chunk has wrong length" << std::endl;
         return false;
     }
@@ -427,7 +453,7 @@ bool PNGChunk::IDATInfo::read_info(uint8_t* data, uint32_t length) {
     uint8_t blockHeader = data[2];
     // Un bloque (BFINAL = 1) sin comprimir (BTYPE = 00), el resto del byte
     // no contiene información (todo 0)
-    if (blockHeader != IDAT_BLOCK_HEADER) {
+    if (blockHeader != IDAT_BLOCK_HEADER | IDAT_BLOCK_LAST) {
         std::cerr << "Unsupported IDAT block type" << std::endl;
         return false;
     }
@@ -440,7 +466,8 @@ bool PNGChunk::IDATInfo::read_info(uint8_t* data, uint32_t length) {
         return false;
     }
 
-    return set_data(&data[7], blockLength, length - IDAT_LENGTH_HEADER);
+    return set_data(&data[7], blockLength,
+                    length - IDAT_LENGTH_ZLIB - IDAT_LENGTH_BLOCK);
 }
 
 bool PNGChunk::IDATInfo::get_writable_info(uint8_t*& data, uint32_t& length) {

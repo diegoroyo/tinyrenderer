@@ -55,20 +55,24 @@ class PNGChunk {
        private:
         // CINF = 0, CM = 8, FLEVEL = FDICT = 0, FCHECK = 1D (mult. 31)
         static const uint16_t IDAT_ZLIB_HEADER = 0x081D;
-        // Last block marker 1, block type 00 (menor a mayor peso)
-        static const uint8_t IDAT_BLOCK_HEADER = 0x01;
-        static const int ADLER_MODULO = 65521;  // ver adler_checksum
+        // Last block marker 0, block type 00 (menor a mayor peso)
+        static const uint8_t IDAT_BLOCK_HEADER = 0x00;
+        // Marcador de último bloque (OR con BLOCK_HEADER)
+        static const uint8_t IDAT_BLOCK_LAST = 0x01;
+        static const uint16_t MAX_BLOCK = 65535;  // 16b para length
+        static const int ADLER_MODULO = 65521;    // ver adler_checksum
 
         uint8_t paeth_pred(uint8_t a, uint8_t b, uint8_t c);
 
        public:
         // Tamaño mínimo (headers sin datos)
         // 2 header + 5 block header | 4 block length
-        static const int IDAT_LENGTH_HEADER = 7;
+        static const int IDAT_LENGTH_ZLIB = 2;
+        static const int IDAT_LENGTH_BLOCK = 5;
         static const int IDAT_LENGTH_CHECKSUM = 4;
 
         uint8_t* blockData;
-        uint16_t blockLength;  // todos los datos IDAT
+        uint32_t blockLength;  // son 16b pero almacena todos bloques DEFLATE
         uint16_t chunkLength;  // solo los de un chunk
         uint32_t checksum;     // solo valido para el ultimo chunk
         RGBColor*** pixelData;
