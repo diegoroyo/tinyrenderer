@@ -7,8 +7,11 @@ MAIN = main
 
 NOMBREEXE = main
 
-CPPFLAGS = -ggdb -O0 -std=c++11
-CC = x86_64-w64-mingw32-g++
+CPPFLAGS = -O3 -std=c++11
+CC = g++
+
+#CPPFLAGS = -ggdb -O0 -std=c++11
+#CC = x86_64-w64-mingw32-g++
 
 .PHONY: all
 all: ${BINDIR}/${NOMBREEXE}
