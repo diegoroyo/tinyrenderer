@@ -64,6 +64,26 @@ PNGChunk::PNGChunk(ChunkInfo* _chunkInfo)
     }
 }
 
+// Leer solo length y tipo de chunk
+// No está hecho para leer los datos del chunk, solo su cabecera
+bool PNGChunk::read_header(std::ifstream& is) {
+    // Longitud y tipo
+    uint8_t length_aux[4];
+    is.read((char*)length_aux, 4);
+    this->length = read_endian(length_aux);
+    this->chunkCrcDividend = new uint8_t[4];
+    this->chunkType = this->chunkCrcDividend;
+    is.read((char*)this->chunkCrcDividend, 4);
+
+    // Comprobar que la lectura ha ido bien
+    if (!is.good()) {
+        std::cerr << "An error ocurred while reading the data" << std::endl;
+        return false;
+    } else {
+        return true;
+    }
+}
+
 // Obtener datos del chunk a partir de un ifstream
 bool PNGChunk::read_data(std::ifstream& is) {
     if (!is.good()) {
@@ -119,55 +139,49 @@ bool PNGChunk::read_file(std::ifstream& is) {
             return false;
         }
 
-        // La información puede ir separada en varios chunks IDAT
-        if (info->chunkLength < info->blockLength) {
-            // Crear un buffer más grande para guardar los chunks IDAT
+        // Leer la longitud del resto de chunks IDAT
+        int totalLength = info->blockLength;
+        int startPos = is.tellg();  // marcar para poder volver
+        PNGChunk nextChunk;
+        while (nextChunk.read_header(is) && nextChunk.is_type("IDAT")) {
+            totalLength += nextChunk.length;
+            is.seekg(nextChunk.length + 4, std::ios_base::cur);
+        }
+        if (!is.good()) {
+            return false;
+        }
+        // Volver a la posición inicial
+        is.seekg(startPos, std::ios_base::beg);
+        // Si hay chunks que faltan por leer, hacerlo
+        // Juntar todos sus datos en blockData del chunkInfo
+        if (info->blockLength < totalLength) {
             uint8_t* firstChunkData = info->blockData;
-            info->blockData = new uint8_t[info->blockLength];
-            memcpy(info->blockData, firstChunkData, info->chunkLength);
-            // no hace falta borrar firstChunkData, ya lo borra este chunk
-
-            // Leer el resto de chunks IDAT (tienen que ir seguidos)
-            while (isChunkOk && info->chunkLength < info->blockLength) {
-                // Leer chunk siguiente
+            info->blockData = new uint8_t[totalLength];
+            memcpy(info->blockData, firstChunkData, info->blockLength);
+            // Leer el resto de bloques IDAT
+            while (info->blockLength < totalLength) {
+                // Leer datos del siguiente chunk
                 PNGChunk moreChunk;
-                isChunkOk = moreChunk.read_data(is);
-                if (!isChunkOk || !moreChunk.is_type("IDAT")) {
+                if (!moreChunk.read_data(is) || !moreChunk.is_type("IDAT")) {
                     std::cerr << "Error: Invalid chunk after first IDAT chunk"
                               << std::endl;
                     return false;
                 }
+                // Copiarlos al chunk actual
+                memcpy(&info->blockData[info->blockLength], moreChunk.data,
+                       moreChunk.length);
+                info->blockLength += moreChunk.length;
 
-                // Almacenar datos en su chunkInfo
-                moreChunk.chunkInfo = new PNGChunk::IDATInfo();
-                PNGChunk::IDATInfo* moreInfo =
-                    dynamic_cast<PNGChunk::IDATInfo*>(moreChunk.chunkInfo);
-                moreInfo->set_data(moreChunk.data,
-                                   info->blockLength - info->chunkLength,
-                                   moreChunk.length);
-
-                // Juntar los datos del leido con la que tenemos
-                memcpy(&info->blockData[info->chunkLength], moreInfo->blockData,
-                       moreInfo->chunkLength);
-                info->chunkLength = info->chunkLength + moreInfo->chunkLength;
+                // Actualizar checksum del chunkInfo del chunk actual
+                PNGChunk::IDATInfo* moreInfo = new PNGChunk::IDATInfo();
+                moreChunk.chunkInfo = moreInfo;
+                moreInfo->read_info(moreChunk.data, moreChunk.length);
                 info->checksum = moreInfo->checksum;
             }
         }
-        if (isChunkOk) {
-            // Comprobar el checksum del bloque IDAT entero (todos los chunks)
-            uint32_t calc =
-                info->adler_checksum(info->blockData, info->blockLength);
-            if (info->checksum != calc) {
-                std::cerr << "Invalid IDAT block checksum" << std::endl;
-                return false;
-            }
-        }
-        return isChunkOk;
-
-    } else {
-        // No hace falta tratar nada para este tipo
-        return true;
     }
+
+    return true;
 }
 
 bool PNGChunk::write_file(std::ofstream& os) {
@@ -336,32 +350,34 @@ uint8_t PNGChunk::IDATInfo::paeth_pred(uint8_t a, uint8_t b, uint8_t c) {
     return pa <= pb && pa <= pc ? a : (pb <= pc ? b : c);
 }
 
-// Datos descomprimidos de un chunk IDAT, añadir a la imagen
+// Leer los datos de pixeles de la imagen, sin cabeceras
+// Más info:
 // https://stackoverflow.com/questions/49017937/png-decompressed-idat-chunk-how-to-read
-bool PNGChunk::IDATInfo::process_pixels(int width, int height) {
-    int i = 0;                   // posición de memoria apuntada
+bool PNGChunk::IDATInfo::process_pixel_data(int width, int height,
+                                            uint8_t* data, int length) {
+    int pos = 0;                 // posición de memoria apuntada
     int pixelX = 0, pixelY = 0;  // pixeles X, Y apuntados
-    int filterType = 0;          // tipo de filtro para la fila en curso
+    int filterType = 0;          // tipo de filtro en la fila en curso
     bool readOk = true;
     this->pixelData = new RGBColor**[height];
-    while (readOk && i < this->blockLength) {
+    while (readOk && pos < length) {
         // Cada fila comienza con un byte para indicar tipo de filtro
         // Solo se soporta tipos 0, 1 y 2 (None, Sub y Add)
         // https://www.w3.org/TR/PNG-Filters.html
         if (pixelX == 0) {
-            if (this->blockData[i] > 4) {
-                std::cerr << "Error: invalid filter type" << std::endl;
+            if (data[pos] > 4) {
+                std::cerr << "Error: invalid filter type (" << (int)data[pos]
+                          << ")" << std::endl;
                 readOk = false;
             } else {
                 this->pixelData[pixelY] = new RGBColor*[width];
-                filterType = this->blockData[i];
-                i++;  // leido un byte
+                filterType = data[pos++];  // leer un byte
             }
         }
         // Leer datos del pixel (r, g, b 3 bytes en ese orden)
         if (readOk) {
-            uint8_t r = this->blockData[i], g = this->blockData[i + 1],
-                    b = this->blockData[i + 2];
+            uint8_t r = data[pos], g = data[pos + 1], b = data[pos + 2];
+            pos += 3;  // leidos 3 bytes
             const RGBColor *left, *top, *leftTop;
             left = pixelX > 0 ? this->pixelData[pixelY][pixelX - 1]
                               : &RGBColor::Black;
@@ -394,7 +410,6 @@ bool PNGChunk::IDATInfo::process_pixels(int width, int height) {
                     break;
             }
             this->pixelData[pixelY][pixelX] = new RGBColor(r, g, b);
-            i = i + 3;  // leidos 3 bytes
             pixelX++;
             if (pixelX == width) {
                 pixelX = 0;
@@ -405,24 +420,81 @@ bool PNGChunk::IDATInfo::process_pixels(int width, int height) {
     return readOk;
 }
 
-// Leer solo la parte de datos y un checksum que solo es valido si este es el
-// último chunk
-bool PNGChunk::IDATInfo::set_data(uint8_t* data, uint32_t blockLength,
-                                  uint32_t chunkLength) {
-    if (chunkLength < IDAT_LENGTH_CHECKSUM) {
-        std::cerr << "IDAT chunk has wrong length" << std::endl;
+// Ya obtenidos los datos de todos los chunks IDAT,
+// leer los diferentes bloques y obtener los píxeles de la imagen
+bool PNGChunk::IDATInfo::process_pixels(int width, int height) {
+    int pixelLength = (3 * width + 1) * height;
+    uint8_t* rawPixelData =
+        new uint8_t[pixelLength];  // solo pixeles, sin cabeceras
+    // Cabecera ZLIB (2 bytes)
+    uint16_t compressionHeader = this->blockData[0] << 8 | this->blockData[1];
+    if (compressionHeader % 31 != 0) {
+        std::cerr << "ZLIB header has invalid CHECK bits" << std::endl;
+        return false;
+    }
+    // Comprobar que CM = 8, FLEVEL = 0 y FDICT = 0
+    if (static_cast<uint16_t>(compressionHeader & 0x0FE0) !=
+        (IDAT_ZLIB_HEADER & 0x0FE0)) {
+        std::cerr << "Unsupported ZLIB compression type" << std::endl;
+        return false;
+    }
+    // Leer todos los bloques DEFLATE
+    int pixelPos = 0;  // rawPixelData leido
+    int blockPos = 2;  // posicion en los datos
+    uint8_t blockHeader = IDAT_BLOCK_HEADER;
+    while ((blockHeader & 0x01) !=
+           IDAT_BLOCK_LAST) {  // quedan bloques por leer
+        // Cabecera del bloque (3 bits + 5 sin usar: 1 byte)
+        blockHeader = this->blockData[blockPos++];
+        // Bloque sin comprimir (BTYPE = 00), el resto del byte
+        // no contiene información (todo 0)
+        if ((blockHeader & 0xFE) != IDAT_BLOCK_HEADER) {
+            std::cerr << "Unsupported DEFLATE block type" << std::endl;
+            return false;
+        }
+        // Longitud del bloque (2 bytes) + invertido Ca1 (2 bytes)
+        uint16_t blockLength =
+            this->blockData[blockPos + 1] << 8 | this->blockData[blockPos];
+        uint16_t invertedLength =
+            this->blockData[blockPos + 3] << 8 | this->blockData[blockPos + 2];
+        blockPos += 4;  // 4 bytes longitud + invertido
+        if ((blockLength & invertedLength) != 0) {
+            std::cerr << "Invalid DEFLATE block length" << std::endl;
+            return false;
+        }
+
+        // Asegurar que el tamaño no se pasa y copiar la información
+        if (pixelPos + blockLength > pixelLength) {
+            std::cerr << "DEFLATE data has incorrect size" << std::endl;
+            return false;
+        }
+        memcpy(&rawPixelData[pixelPos], &this->blockData[blockPos],
+               blockLength);
+        pixelPos += blockLength;
+        blockPos += blockLength;
+    }
+
+    // Comprobar que todo ha ido bien, falta el checksum por leer
+    // (pero ya se encuentra en this->checksum)
+    if (pixelPos != pixelLength ||
+        blockPos != this->blockLength - IDAT_LENGTH_CHECKSUM) {
+        std::cerr << "DEFLATE data has incorrect size" << std::endl;
+        return false;
+    }
+    // Comprobar CRC
+    uint32_t calc_checksum = adler_checksum(rawPixelData, pixelLength);
+    if (this->checksum != calc_checksum) {
+        std::cerr << "Invalid data adler checksum" << std::endl;
         return false;
     }
 
-    // Checksum Adler-32 de los datos (data, length)
-    this->blockData = data;
-    this->blockLength = blockLength;
-    if (blockLength == chunkLength - IDAT_LENGTH_CHECKSUM) {
-        this->chunkLength = blockLength;
-    } else {
-        this->chunkLength = chunkLength;
+    // Procesar los datos obtenidos en rawPixelData
+    if (!process_pixel_data(width, height, rawPixelData, pixelLength)) {
+        std::cerr << "An error ocurred reading pixel data" << std::endl;
+        return false;
     }
-    this->checksum = read_endian(&data[chunkLength - 4]);
+
+    delete[] rawPixelData;
     return true;
 }
 
@@ -430,43 +502,16 @@ bool PNGChunk::IDATInfo::set_data(uint8_t* data, uint32_t blockLength,
 // https://stackoverflow.com/questions/33535388/deflate-compression-spec-clarifications
 // https://github.com/libyal/assorted/blob/master/documentation/Deflate%20(zlib)%20compressed%20data%20format.asciidoc
 bool PNGChunk::IDATInfo::read_info(uint8_t* data, uint32_t length) {
-    if (length < IDAT_LENGTH_ZLIB + IDAT_LENGTH_BLOCK) {
+    if (length < IDAT_LENGTH_CHECKSUM) {
         std::cerr << "IDAT chunk has wrong length" << std::endl;
         return false;
     }
 
-    // Cabecera (2 bytes)
-    uint16_t compressionHeader = data[0] << 8 | data[1];
-    if (compressionHeader % 31 != 0) {
-        std::cerr << "ZLIB header has invalid CHECK bits" << std::endl;
-        return false;
-    }
-    // Comprobar que CM = 8, FLEVEL = 0 y FDICT = 0
-    if (static_cast<uint16_t>(compressionHeader & 0x0FE0) != IDAT_ZLIB_HEADER &
-        0x0FE0) {
-        std::cerr << "Unsupported ZLIB compression type" << std::endl;
-        return false;
-    }
-
-    // Cabecera del bloque (3 bits + 5 sin usar: 1 byte)
-    uint8_t blockHeader = data[2];
-    // Un bloque (BFINAL = 1) sin comprimir (BTYPE = 00), el resto del byte
-    // no contiene información (todo 0)
-    if (blockHeader != (IDAT_BLOCK_HEADER | IDAT_BLOCK_LAST)) {
-        std::cerr << "Unsupported DEFLATE block type" << std::endl;
-        return false;
-    }
-
-    // Longitud del bloque (2 bytes) + invertido Ca1 (2 bytes)
-    uint16_t blockLength = data[4] << 8 | data[3];
-    uint16_t invertedLength = data[6] << 8 | data[5];
-    if (blockLength & invertedLength != 0) {
-        std::cerr << "Invalid DEFLATE block length" << std::endl;
-        return false;
-    }
-
-    return set_data(&data[7], blockLength,
-                    length - IDAT_LENGTH_ZLIB - IDAT_LENGTH_BLOCK);
+    // Checksum Adler-32 de los datos (data, length)
+    this->blockData = data;
+    this->blockLength = length;
+    this->checksum = read_endian(&data[length - 4]);
+    return true;
 }
 
 bool PNGChunk::IDATInfo::get_writable_info(uint8_t*& data, uint32_t& length) {

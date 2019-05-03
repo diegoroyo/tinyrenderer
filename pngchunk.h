@@ -17,6 +17,7 @@ class PNGChunk {
     uint8_t* chunkCrcDividend;
 
     uint32_t calculate_crc(uint8_t* stream, int streamLength);
+    bool read_header(std::ifstream& is);
     bool read_data(std::ifstream& is);
 
    public:
@@ -63,6 +64,8 @@ class PNGChunk {
         static const int ADLER_MODULO = 65521;    // ver adler_checksum
 
         uint8_t paeth_pred(uint8_t a, uint8_t b, uint8_t c);
+        bool process_pixel_data(int width, int height, uint8_t* data,
+                                int length);
 
        public:
         // Tamaño mínimo (headers sin datos)
@@ -72,17 +75,14 @@ class PNGChunk {
         static const int IDAT_LENGTH_CHECKSUM = 4;
 
         uint8_t* blockData;
-        uint32_t blockLength;  // son 16b pero almacena todos bloques DEFLATE
-        uint16_t chunkLength;  // solo los de un chunk
-        uint32_t checksum;     // solo valido para el ultimo chunk
+        int blockLength;    // son 16b pero almacena todos bloques DEFLATE
+        uint32_t checksum;  // solo valido para el ultimo chunk
         RGBColor*** pixelData;
 
         IDATInfo() = default;
         IDATInfo(int width, int height, RGBColor*** pixels);
         uint32_t adler_checksum(uint8_t* data, uint32_t length);
         bool process_pixels(int width, int height);
-        bool set_data(uint8_t* data, uint32_t blockLength,
-                      uint32_t chunkLength);
         bool read_info(uint8_t* data, uint32_t length) override;
         bool get_writable_info(uint8_t*& data, uint32_t& length) override;
     };
