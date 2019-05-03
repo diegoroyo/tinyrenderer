@@ -10,13 +10,6 @@ The referenced tutorial uses TGA images (see files `tgaimage.cpp` and `tgafile.h
 
 This module allows for basic loading, modifying and writing operations with PNG images. It can load images with RGB data (no alpha channel, no palette) and it doesn't support compression as it wasn't the main goal of this project.
 
-More info about the process of loading/saving an image and the needed calculations (filters, checksums, etc.) can be found on the source code.
+Examples and usage info can be found [on its folder](https://github.com/diegoroyo/tinyrenderer/tree/master/pngimage).
 
-```C++
-/* Load/save image */
-bool read_png_file(const char* filename);
-bool write_png_file(const char* filename);
-/* Modify pixel data */
-bool get_pixel(int x, int y, RGBColor& color);
-void set_pixel(int x, int y, const RGBColor& color);
-```
+More info about the process of loading/saving an image and the needed calculations (filters, checksums, etc.) can be found on the source code.

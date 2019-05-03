@@ -1,6 +1,6 @@
 #include <iostream>
-#include "pngimage.h"
-#include "rgbcolor.h"
+#include "pngimage/pngimage.h"
+#include "pngimage/rgbcolor.h"
 
 int main() {
     // Crear una imagen desde 0 y guardarla (gradient.png)
@@ -11,11 +11,11 @@ int main() {
             newImg.set_pixel(x, y, color);
         }
     }
-    newImg.write_png_file("png/gradient.png");
+    newImg.write_png_file("pngimage/gradient.png");
 
     // Leer gradient.png y generar su negativo
     PNGImage readImg;
-    if (readImg.read_png_file("png/gradient.png")) {
+    if (readImg.read_png_file("pngimage/gradient.png")) {
         RGBColor readColor;
         for (int y = 0; y < readImg.height; y++) {
             for (int x = 0; x < readImg.width; x++) {
@@ -26,7 +26,7 @@ int main() {
                 readImg.set_pixel(x, y, readColor);
             }
         }
-        readImg.write_png_file("png/gradient_negative.png");
+        readImg.write_png_file("pngimage/gradient_negative.png");
     } else {
         std::cout << "Error al leer la imagen" << std::endl;
     }

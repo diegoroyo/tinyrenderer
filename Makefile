@@ -1,5 +1,6 @@
 BINDIR = bin
 
+PIFOLDER = pngimage
 PNGIMAGE = pngimage
 PNGCHUNK = pngchunk
 RGBCOLOR = rgbcolor
@@ -23,11 +24,11 @@ clean:
 ${BINDIR}/${NOMBREEXE}: ${BINDIR}/${PNGIMAGE}.o ${BINDIR}/${PNGCHUNK}.o ${BINDIR}/${RGBCOLOR}.o ${MAIN}.cpp
 	${CC} $^ ${CPPFLAGS} -o $@
 
-${BINDIR}/${PNGIMAGE}.o: ${PNGIMAGE}.cpp ${PNGIMAGE}.h
+${BINDIR}/${PNGIMAGE}.o: ${PIFOLDER}/${PNGIMAGE}.cpp ${PIFOLDER}/${PNGIMAGE}.h
 	${CC} -c ${CPPFLAGS} $< -o $@
 
-${BINDIR}/${PNGCHUNK}.o: ${PNGCHUNK}.cpp ${PNGCHUNK}.h
+${BINDIR}/${PNGCHUNK}.o: ${PIFOLDER}/${PNGCHUNK}.cpp ${PIFOLDER}/${PNGCHUNK}.h
 	${CC} -c ${CPPFLAGS} $< -o $@
 
-${BINDIR}/${RGBCOLOR}.o: ${RGBCOLOR}.cpp ${RGBCOLOR}.h
+${BINDIR}/${RGBCOLOR}.o: ${PIFOLDER}/${RGBCOLOR}.cpp ${PIFOLDER}/${RGBCOLOR}.h
 	${CC} -c ${CPPFLAGS} $< -o $@
