@@ -22,6 +22,8 @@ class PNGImage {
     bool write_png_file(const char* filename);
     bool get_pixel(int x, int y, RGBColor& color);
     void set_pixel(int x, int y, const RGBColor& color);
+    void flip_vertically();
+    void flip_horizontally();
 
    private:
     // Todos los archivos PNG tienen comienzan con estos 8 bytes (ver

@@ -173,6 +173,32 @@ void PNGImage::set_pixel(int x, int y, const RGBColor& color) {
     }
 }
 
+// Volteo vertical
+void PNGImage::flip_vertically() {
+    for (int x = 0; x < this->width; x++) {
+        for (int y = 0; y < this->height / 2; y++) {
+            RGBColor leftColor, rightColor;
+            this->get_pixel(x, y, leftColor);
+            this->get_pixel(x, this->height - y, rightColor);
+            this->set_pixel(x, this->height - y, leftColor);
+            this->set_pixel(x, y, rightColor);
+        }
+    }
+}
+
+// Volteo horizontal
+void PNGImage::flip_horizontally() {
+    for (int y = 0; y < this->height; y++) {
+        for (int x = 0; x < this->width / 2; x++) {
+            RGBColor leftColor, rightColor;
+            this->get_pixel(x, y, leftColor);
+            this->get_pixel(this->width - x, y, rightColor);
+            this->set_pixel(this->width - x, y, leftColor);
+            this->set_pixel(x, y, rightColor);
+        }
+    }
+}
+
 PNGImage::~PNGImage() {
     for (int h = 0; h < this->height; h++) {
         for (int w = 0; w < this->width; w++) {
