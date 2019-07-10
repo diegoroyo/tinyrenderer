@@ -4,6 +4,7 @@ PIFOLDER = pngimage
 PNGIMAGE = pngimage
 PNGCHUNK = pngchunk
 RGBCOLOR = rgbcolor
+MODEL = model
 MAIN = main
 
 NOMBREEXE = main
@@ -21,7 +22,7 @@ all: ${BINDIR}/${NOMBREEXE}
 clean:
 	rm -rf ${BINDIR}/*
 
-${BINDIR}/${NOMBREEXE}: ${BINDIR}/${PNGIMAGE}.o ${BINDIR}/${PNGCHUNK}.o ${BINDIR}/${RGBCOLOR}.o ${MAIN}.cpp
+${BINDIR}/${NOMBREEXE}: ${BINDIR}/${PNGIMAGE}.o ${BINDIR}/${PNGCHUNK}.o ${BINDIR}/${RGBCOLOR}.o ${BINDIR}/${MODEL}.o ${MAIN}.cpp
 	${CC} $^ ${CPPFLAGS} -o $@
 
 ${BINDIR}/${PNGIMAGE}.o: ${PIFOLDER}/${PNGIMAGE}.cpp ${PIFOLDER}/${PNGIMAGE}.h
@@ -31,4 +32,7 @@ ${BINDIR}/${PNGCHUNK}.o: ${PIFOLDER}/${PNGCHUNK}.cpp ${PIFOLDER}/${PNGCHUNK}.h
 	${CC} -c ${CPPFLAGS} $< -o $@
 
 ${BINDIR}/${RGBCOLOR}.o: ${PIFOLDER}/${RGBCOLOR}.cpp ${PIFOLDER}/${RGBCOLOR}.h
+	${CC} -c ${CPPFLAGS} $< -o $@
+
+${BINDIR}/${MODEL}.o: ${MODEL}.cpp ${MODEL}.h
 	${CC} -c ${CPPFLAGS} $< -o $@
