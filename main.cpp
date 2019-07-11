@@ -1,7 +1,7 @@
 #include <iostream>
+#include "model.h"
 #include "pngimage/pngimage.h"
 #include "pngimage/rgbcolor.h"
-#include "model.h"
 
 void line(int x0, int y0, int x1, int y1, PNGImage& image,
           const RGBColor& color) {
@@ -40,29 +40,63 @@ void line(int x0, int y0, int x1, int y1, PNGImage& image,
     }
 }
 
-int main(int argc, char** argv) {
-    if (argc != 2) {
-        std::cerr << "Usage: " << argv[0] << " <model_name>" << std::endl;
-        return 1;
-    }
+void line(Vec2i p0, Vec2i p1, PNGImage& image, const RGBColor& color) {
+    line(p0.x, p0.y, p1.x, p1.y, image, color);
+}
 
-    Model model(argv[1]);
-    const int width = 800, height = 800;
-    PNGImage image(width, height, RGBColor::Black);
-
-    // Renderizado básico
-    for (int i = 0; i < model.nfaces(); i++) {
-        std::vector<int> face = model.face(i);
-        for (int j = 0; j < face.size(); j++) {
-            Vec3f v0 = model.vert(face[j]);
-            Vec3f v1 = model.vert(face[(j + 1) % face.size()]);
-            int x0 = (v0.x + 1.0) * width / 2.0;
-            int x1 = (v1.x + 1.0) * width / 2.0;
-            int y0 = (v0.y + 1.0) * height / 2.0;
-            int y1 = (v1.y + 1.0) * height / 2.0;
-            line(x0, y0, x1, y1, image, RGBColor::White);
+void triangle(Vec2i t0, Vec2i t1, Vec2i t2, PNGImage& image,
+              const RGBColor& color) {
+    // Ordenar vertices de menor a mayor y
+    if (t0.y > t1.y) std::swap(t0, t1);
+    if (t0.y > t2.y) std::swap(t0, t2);
+    if (t1.y > t2.y) std::swap(t1, t2);
+    line(t0, t1, image, color);
+    line(t0, t2, image, color);
+    line(t1, t2, image, color);
+    // t0 está abajo, t2 arriba
+    // lineas horizontales desde t0 hasta t1
+    int x0 = t0.x, x1 = t0.x;
+    int error0 = 0, error1 = 0;
+    int derror0 = std::abs(t1.x - t0.x) * 2,
+        derror1 = std::abs(t2.x - t0.x) * 2;
+    for (int y = t0.y; y < t1.y; y++) {
+        line(x0, y, x1, y, image, color);
+        error0 += derror0;
+        while (error0 > t1.y - t0.y) {
+            x0 += (t1.x > t0.x) ? 1 : -1;
+            error0 -= 2 * (t1.y - t0.y);
+        }
+        error1 += derror1;
+        while (error1 > t2.y - t0.y) {
+            x1 += (t2.x > t0.x) ? 1 : -1;
+            error1 -= 2 * (t2.y - t0.y);
         }
     }
+    derror0 = std::abs(t2.x - t1.x) * 2;
+    error0 = 0;
+    for (int y = t1.y; y <= t2.y; y++) {
+        line(x0, y, x1, y, image, color);
+        error0 += derror0;
+        while (error0 > t2.y - t1.y) {
+            x0 += (t2.x > t1.x) ? 1 : -1;
+            error0 -= 2 * (t2.y - t1.y);
+        }
+        error1 += derror1;
+        while (error1 > t2.y - t0.y) {
+            x1 += (t2.x > t0.x) ? 1 : -1;
+            error1 -= 2 * (t2.y - t0.y);
+        }
+    }
+}
+
+int main(int argc, char** argv) {
+    PNGImage image(200, 200, RGBColor::Black);
+    Vec2i t0[3] = {Vec2i(10, 70), Vec2i(50, 160), Vec2i(70, 80)};
+    Vec2i t1[3] = {Vec2i(180, 50), Vec2i(150, 1), Vec2i(70, 180)};
+    Vec2i t2[3] = {Vec2i(180, 150), Vec2i(120, 160), Vec2i(130, 180)};
+    triangle(t0[0], t0[1], t0[2], image, RGBColor::Red);
+    triangle(t1[0], t1[1], t1[2], image, RGBColor::White);
+    triangle(t2[0], t2[1], t2[2], image, RGBColor::Green);
 
     image.flip_vertically();
     image.write_png_file("images/output.png");
