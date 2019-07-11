@@ -46,45 +46,29 @@ void line(Vec2i p0, Vec2i p1, PNGImage& image, const RGBColor& color) {
 
 void triangle(Vec2i t0, Vec2i t1, Vec2i t2, PNGImage& image,
               const RGBColor& color) {
+    // Caso especial línea horizontal
+    if (t0.y == t1.y && t0.y == t2.y) {
+        line(t0, t1, image, color);
+        line(t0, t2, image, color);
+        return;
+    }
     // Ordenar vertices de menor a mayor y
     if (t0.y > t1.y) std::swap(t0, t1);
     if (t0.y > t2.y) std::swap(t0, t2);
     if (t1.y > t2.y) std::swap(t1, t2);
-    line(t0, t1, image, color);
-    line(t0, t2, image, color);
-    line(t1, t2, image, color);
-    // t0 está abajo, t2 arriba
-    // lineas horizontales desde t0 hasta t1
-    int x0 = t0.x, x1 = t0.x;
-    int error0 = 0, error1 = 0;
-    int derror0 = std::abs(t1.x - t0.x) * 2,
-        derror1 = std::abs(t2.x - t0.x) * 2;
-    for (int y = t0.y; y < t1.y; y++) {
-        line(x0, y, x1, y, image, color);
-        error0 += derror0;
-        while (error0 > t1.y - t0.y) {
-            x0 += (t1.x > t0.x) ? 1 : -1;
-            error0 -= 2 * (t1.y - t0.y);
-        }
-        error1 += derror1;
-        while (error1 > t2.y - t0.y) {
-            x1 += (t2.x > t0.x) ? 1 : -1;
-            error1 -= 2 * (t2.y - t0.y);
-        }
-    }
-    derror0 = std::abs(t2.x - t1.x) * 2;
-    error0 = 0;
-    for (int y = t1.y; y <= t2.y; y++) {
-        line(x0, y, x1, y, image, color);
-        error0 += derror0;
-        while (error0 > t2.y - t1.y) {
-            x0 += (t2.x > t1.x) ? 1 : -1;
-            error0 -= 2 * (t2.y - t1.y);
-        }
-        error1 += derror1;
-        while (error1 > t2.y - t0.y) {
-            x1 += (t2.x > t0.x) ? 1 : -1;
-            error1 -= 2 * (t2.y - t0.y);
+    // Dibujo
+    int total_height = t2.y - t0.y;
+    for (int i = 0; i < total_height; i++) {
+        bool second_half = i > t1.y - t0.y || t1.y == t0.y;
+        int segment_height = second_half ? t2.y - t1.y : t1.y - t0.y;
+        float alpha = i / (float)total_height;
+        float beta =
+            (i - (second_half ? t1.y - t0.y : 0)) / (float)segment_height;
+        Vec2i A = t0 + (t2 - t0) * alpha;
+        Vec2i B = second_half ? t1 + (t2 - t1) * beta : t0 + (t1 - t0) * beta;
+        if (A.x > B.x) std::swap(A, B);
+        for (int x = A.x; x <= B.x; x++) {
+            image.set_pixel(x, t0.y + i, color);
         }
     }
 }
