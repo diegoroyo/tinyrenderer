@@ -44,31 +44,45 @@ void line(Vec2i p0, Vec2i p1, PNGImage& image, const RGBColor& color) {
     line(p0.x, p0.y, p1.x, p1.y, image, color);
 }
 
+Vec3f barycentric(Vec2i t0, Vec2i t1, Vec2i t2, Vec2i p) {
+    Vec2i ab = t1 - t0;
+    Vec2i ac = t2 - t0;
+    Vec2i pa = t0 - p;
+    // Obtener u, v tq u*ab + v*ac + pa = 0
+    // Resolver (u v 1)'*(abx acx pax) = 0 y (u v 1)'*(aby acy pay) = 0
+    // producto vectorial de ambos dos, escalado para z = 1 (x/z, y/z, z/z=1)
+    Vec3i cross = Vec3i(ab.x, ac.x, pa.x) ^ Vec3i(ab.y, ac.y, pa.y);
+    // Si la componente z es 0, el triangulo es degenerado y no se dibuja
+    if (cross.z == 0) return Vec3f(-1.0, -1.0, -1.0);
+    float u = cross.x / (float)cross.z;
+    float v = cross.y / (float)cross.z;
+    return Vec3f(1.0 - u - v, u, v);
+}
+
 void triangle(Vec2i t0, Vec2i t1, Vec2i t2, PNGImage& image,
               const RGBColor& color) {
-    // Caso especial línea horizontal
-    if (t0.y == t1.y && t0.y == t2.y) {
-        line(t0, t1, image, color);
-        line(t0, t2, image, color);
-        return;
+    // Bounding box (dos puntos (xmin, ymin), (xmax, ymax))
+    Vec2i bboxmin(t0.x, t0.y), bboxmax(t0.x, t0.y);
+    for (int i = 0; i < 2; i++) {
+        if (t1.raw[i] < bboxmin.raw[i]) bboxmin.raw[i] = t1.raw[i];
+        if (t2.raw[i] < bboxmin.raw[i]) bboxmin.raw[i] = t2.raw[i];
+        if (t1.raw[i] > bboxmax.raw[i]) bboxmax.raw[i] = t1.raw[i];
+        if (t2.raw[i] > bboxmax.raw[i]) bboxmax.raw[i] = t2.raw[i];
     }
-    // Ordenar vertices de menor a mayor y
-    if (t0.y > t1.y) std::swap(t0, t1);
-    if (t0.y > t2.y) std::swap(t0, t2);
-    if (t1.y > t2.y) std::swap(t1, t2);
-    // Dibujo
-    int total_height = t2.y - t0.y;
-    for (int i = 0; i < total_height; i++) {
-        bool second_half = i > t1.y - t0.y || t1.y == t0.y;
-        int segment_height = second_half ? t2.y - t1.y : t1.y - t0.y;
-        float alpha = i / (float)total_height;
-        float beta =
-            (i - (second_half ? t1.y - t0.y : 0)) / (float)segment_height;
-        Vec2i A = t0 + (t2 - t0) * alpha;
-        Vec2i B = second_half ? t1 + (t2 - t1) * beta : t0 + (t1 - t0) * beta;
-        if (A.x > B.x) std::swap(A, B);
-        for (int x = A.x; x <= B.x; x++) {
-            image.set_pixel(x, t0.y + i, color);
+    // Recortar el trozo de fuera de la imagen
+    if (bboxmin.x < 0) bboxmin.x = 0;
+    if (bboxmin.y < 0) bboxmin.y = 0;
+    if (bboxmax.x > image.width - 1) bboxmax.x = image.width - 1;
+    if (bboxmax.y > image.height - 1) bboxmax.y = image.height - 1;
+    // Pintar los puntos de bbox que pertenecen al triangulo
+    // es decir, bc_coords tiene todas las componentes positivas
+    for (int y = bboxmin.y; y <= bboxmax.y; y++) {
+        for (int x = bboxmin.x; x <= bboxmax.x; x++) {
+            Vec3f bc_coords = barycentric(t0, t1, t2, Vec2i(x, y));
+            if (bc_coords.x >= 0 && bc_coords.y >= 0 && bc_coords.z >= 0) {
+                // El punto pertenece al triangulo
+                image.set_pixel(x, y, color);
+            }
         }
     }
 }
