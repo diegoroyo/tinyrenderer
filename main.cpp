@@ -44,7 +44,8 @@ void line(Vec2i p0, Vec2i p1, PNGImage& image, const RGBColor& color) {
     line(p0.x, p0.y, p1.x, p1.y, image, color);
 }
 
-Vec3f barycentric(Vec2i t0, Vec2i t1, Vec2i t2, Vec2i p) {
+// true si p está dentro del triangulo t0-t1-t2
+bool in_triangle(Vec2i t0, Vec2i t1, Vec2i t2, Vec2i p) {
     Vec2i ab = t1 - t0;
     Vec2i ac = t2 - t0;
     Vec2i pa = t0 - p;
@@ -53,10 +54,13 @@ Vec3f barycentric(Vec2i t0, Vec2i t1, Vec2i t2, Vec2i p) {
     // producto vectorial de ambos dos, escalado para z = 1 (x/z, y/z, z/z=1)
     Vec3i cross = Vec3i(ab.x, ac.x, pa.x) ^ Vec3i(ab.y, ac.y, pa.y);
     // Si la componente z es 0, el triangulo es degenerado y no se dibuja
-    if (cross.z == 0) return Vec3f(-1.0, -1.0, -1.0);
-    float u = cross.x / (float)cross.z;
-    float v = cross.y / (float)cross.z;
-    return Vec3f(1.0 - u - v, u, v);
+    if (cross.z == 0) return false;
+    // Pertenece si las coordenadas (u, v, 1-u-v) son todas mayores que 0
+    // u = cross.x / cross.z, v = cross.y / cross.z
+    // Es decir, las componentes x, y, z tienen el mismo signo (para u, v)
+    // y (x + y) <= z (para 1-u-v)
+    return cross.x * cross.z >= 0 && cross.y * cross.z >= 0 &&
+           cross.x + cross.y <= cross.z;
 }
 
 void triangle(Vec2i t0, Vec2i t1, Vec2i t2, PNGImage& image,
@@ -78,23 +82,41 @@ void triangle(Vec2i t0, Vec2i t1, Vec2i t2, PNGImage& image,
     // es decir, bc_coords tiene todas las componentes positivas
     for (int y = bboxmin.y; y <= bboxmax.y; y++) {
         for (int x = bboxmin.x; x <= bboxmax.x; x++) {
-            Vec3f bc_coords = barycentric(t0, t1, t2, Vec2i(x, y));
-            if (bc_coords.x >= 0 && bc_coords.y >= 0 && bc_coords.z >= 0) {
-                // El punto pertenece al triangulo
+            // Ver si el punto pertenece al triangulo
+            if (in_triangle(t0, t1, t2, Vec2i(x, y)))
                 image.set_pixel(x, y, color);
-            }
         }
     }
 }
 
 int main(int argc, char** argv) {
-    PNGImage image(200, 200, RGBColor::Black);
-    Vec2i t0[3] = {Vec2i(10, 70), Vec2i(50, 160), Vec2i(70, 80)};
-    Vec2i t1[3] = {Vec2i(180, 50), Vec2i(150, 1), Vec2i(70, 180)};
-    Vec2i t2[3] = {Vec2i(180, 150), Vec2i(120, 160), Vec2i(130, 180)};
-    triangle(t0[0], t0[1], t0[2], image, RGBColor::Red);
-    triangle(t1[0], t1[1], t1[2], image, RGBColor::White);
-    triangle(t2[0], t2[1], t2[2], image, RGBColor::Green);
+    if (argc != 2) {
+        std::cerr << "Usage: " << argv[0] << " <model_name>" << std::endl;
+        return 1;
+    }
+
+    Vec3f light(0, 0, 1);
+    light.normalize();
+
+    Model model(argv[1]);
+    int width = 800, height = 800;
+    PNGImage image(width, height, RGBColor::Black);
+    for (int i = 0; i < model.nfaces(); i++) {
+        std::vector<int> face = model.face(i);
+        Vec2i verts[3];
+        Vec3f world[3];
+        for (int j = 0; j < 3; j++) {
+            world[j] = model.vert(face[j]);
+            verts[j].x = (world[j].x + 1.0f) * width / 2.0f;
+            verts[j].y = (world[j].y + 1.0f) * width / 2.0f;
+        }
+        Vec3f normal = (world[1] - world[0]) ^ (world[2] - world[0]);
+        int intensity = light * normal.normalize() * 255;
+        if (intensity > 0) {
+            RGBColor color(intensity, intensity, intensity);
+            triangle(verts[0], verts[1], verts[2], image, color);
+        }
+    }
 
     image.flip_vertically();
     image.write_png_file("images/output.png");
