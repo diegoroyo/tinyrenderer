@@ -70,8 +70,8 @@ bool barycentric(Vec3f t0, Vec3f t1, Vec3f t2, Vec3f p, Vec3f& coords) {
     return in_triangle;
 }
 
-void triangle(Vec3f t0, Vec3f t1, Vec3f t2, PNGImage& image,
-              const RGBColor& color, float* zbuffer) {
+void triangle(Vec3f t0, Vec3f t1, Vec3f t2, Vec2f uv0, Vec2f uv1, Vec2f uv2,
+              Model& model, PNGImage& image, float intensity, float* zbuffer) {
     // Bounding box (dos puntos (xmin, ymin), (xmax, ymax))
     Vec2i bboxmin(t0.x, t0.y), bboxmax(t0.x, t0.y);
     for (int i = 0; i < 2; i++) {
@@ -92,10 +92,15 @@ void triangle(Vec3f t0, Vec3f t1, Vec3f t2, PNGImage& image,
             // Ver si el punto pertenece al triangulo
             Vec3f bc_coords;
             if (barycentric(t0, t1, t2, Vec3f(x, y, 0.0f), bc_coords)) {
+                // zbuffer para dibujar lo más cercano a la cámara
                 float z = bc_coords * Vec3f(t0.z, t1.z, t2.z);
-                if (zbuffer[x + y*image.width] < z) {
-                    zbuffer[x + y*image.width] = z;
-                    image.set_pixel(x, y, color);
+                if (zbuffer[x + y * image.width] < z) {
+                    zbuffer[x + y * image.width] = z;
+                    // Calcular el color (pixel x-y) de la textura
+                    // y multiplicarlo por la intensidad (luz)
+                    Vec2f uv = uv0 * bc_coords.x + uv1 * bc_coords.y +
+                               uv2 * bc_coords.z;
+                    image.set_pixel(x, y, model.diffuse(uv) * intensity);
                 }
             }
         }
@@ -124,19 +129,21 @@ int main(int argc, char** argv) {
     // Dibujar el modelo
     for (int i = 0; i < model.nfaces(); i++) {
         std::vector<int> face = model.face(i);
-        Vec3f verts[3];
         Vec3f world[3];
+        Vec3f verts[3];
+        Vec2f uvs[3];
         for (int j = 0; j < 3; j++) {
             world[j] = model.vert(face[j]);
             verts[j].x = (world[j].x + 1.0f) * width / 2.0f;
             verts[j].y = (world[j].y + 1.0f) * height / 2.0f;
             verts[j].z = world[j].z;
+            uvs[j] = model.uv(i, j);
         }
         Vec3f normal = (world[2] - world[0]) ^ (world[1] - world[0]);
-        int intensity = normal.normalize() * light * 255;
+        float intensity = normal.normalize() * light;
         if (intensity > 0) {
-            RGBColor color(intensity, intensity, intensity);
-            triangle(verts[0], verts[1], verts[2], image, color, zbuffer);
+            triangle(verts[0], verts[1], verts[2], uvs[0], uvs[1], uvs[2],
+                     model, image, intensity, zbuffer);
         }
     }
 
