@@ -1,4 +1,5 @@
 #include <iostream>
+#include <limits>
 #include "model.h"
 #include "pngimage/pngimage.h"
 #include "pngimage/rgbcolor.h"
@@ -45,26 +46,32 @@ void line(Vec2i p0, Vec2i p1, PNGImage& image, const RGBColor& color) {
 }
 
 // true si p está dentro del triangulo t0-t1-t2
-bool in_triangle(Vec2i t0, Vec2i t1, Vec2i t2, Vec2i p) {
-    Vec2i ab = t1 - t0;
-    Vec2i ac = t2 - t0;
-    Vec2i pa = t0 - p;
+bool barycentric(Vec3f t0, Vec3f t1, Vec3f t2, Vec3f p, Vec3f& coords) {
+    Vec3f ab = t1 - t0;
+    Vec3f ac = t2 - t0;
+    Vec3f pa = t0 - p;
     // Obtener u, v tq u*ab + v*ac + pa = 0
     // Resolver (u v 1)'*(abx acx pax) = 0 y (u v 1)'*(aby acy pay) = 0
     // producto vectorial de ambos dos, escalado para z = 1 (x/z, y/z, z/z=1)
-    Vec3i cross = Vec3i(ab.x, ac.x, pa.x) ^ Vec3i(ab.y, ac.y, pa.y);
-    // Si la componente z es 0, el triangulo es degenerado y no se dibuja
-    if (cross.z == 0) return false;
+    Vec3f cross = Vec3f(ab.x, ac.x, pa.x) ^ Vec3f(ab.y, ac.y, pa.y);
     // Pertenece si las coordenadas (u, v, 1-u-v) son todas mayores que 0
     // u = cross.x / cross.z, v = cross.y / cross.z
     // Es decir, las componentes x, y, z tienen el mismo signo (para u, v)
     // y (x + y) <= z (para 1-u-v)
-    return cross.x * cross.z >= 0 && cross.y * cross.z >= 0 &&
-           cross.x + cross.y <= cross.z;
+    // También, si la z es 0 el triángulo es degenerado y no se dibuja
+    bool in_triangle = std::abs(cross.z) >= 1 && cross.x + cross.y <= cross.z &&
+                       cross.x * cross.z >= 0 && cross.y * cross.z >= 0;
+    // No se comprueba si está en el triángulo con u, v por errores de redondeo
+    if (in_triangle) {
+        coords.y = cross.x / cross.z;
+        coords.z = cross.y / cross.z;
+        coords.x = 1.0f - coords.y - coords.z;
+    }
+    return in_triangle;
 }
 
-void triangle(Vec2i t0, Vec2i t1, Vec2i t2, PNGImage& image,
-              const RGBColor& color) {
+void triangle(Vec3f t0, Vec3f t1, Vec3f t2, PNGImage& image,
+              const RGBColor& color, float* zbuffer) {
     // Bounding box (dos puntos (xmin, ymin), (xmax, ymax))
     Vec2i bboxmin(t0.x, t0.y), bboxmax(t0.x, t0.y);
     for (int i = 0; i < 2; i++) {
@@ -83,8 +90,14 @@ void triangle(Vec2i t0, Vec2i t1, Vec2i t2, PNGImage& image,
     for (int y = bboxmin.y; y <= bboxmax.y; y++) {
         for (int x = bboxmin.x; x <= bboxmax.x; x++) {
             // Ver si el punto pertenece al triangulo
-            if (in_triangle(t0, t1, t2, Vec2i(x, y)))
-                image.set_pixel(x, y, color);
+            Vec3f bc_coords;
+            if (barycentric(t0, t1, t2, Vec3f(x, y, 0.0f), bc_coords)) {
+                float z = bc_coords * Vec3f(t0.z, t1.z, t2.z);
+                if (zbuffer[x + y*image.width] < z) {
+                    zbuffer[x + y*image.width] = z;
+                    image.set_pixel(x, y, color);
+                }
+            }
         }
     }
 }
@@ -95,26 +108,35 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    Vec3f light(0, 0, 1);
+    Vec3f light(0, 0, -1);
     light.normalize();
 
     Model model(argv[1]);
     int width = 800, height = 800;
     PNGImage image(width, height, RGBColor::Black);
+
+    // Inicializar z-buffer a numeros negativos
+    float zbuffer[height * width];
+    for (int i = 0; i < height * width; i++) {
+        zbuffer[i] = -1.0f * std::numeric_limits<float>::max();
+    }
+
+    // Dibujar el modelo
     for (int i = 0; i < model.nfaces(); i++) {
         std::vector<int> face = model.face(i);
-        Vec2i verts[3];
+        Vec3f verts[3];
         Vec3f world[3];
         for (int j = 0; j < 3; j++) {
             world[j] = model.vert(face[j]);
             verts[j].x = (world[j].x + 1.0f) * width / 2.0f;
-            verts[j].y = (world[j].y + 1.0f) * width / 2.0f;
+            verts[j].y = (world[j].y + 1.0f) * height / 2.0f;
+            verts[j].z = world[j].z;
         }
-        Vec3f normal = (world[1] - world[0]) ^ (world[2] - world[0]);
-        int intensity = light * normal.normalize() * 255;
+        Vec3f normal = (world[2] - world[0]) ^ (world[1] - world[0]);
+        int intensity = normal.normalize() * light * 255;
         if (intensity > 0) {
             RGBColor color(intensity, intensity, intensity);
-            triangle(verts[0], verts[1], verts[2], image, color);
+            triangle(verts[0], verts[1], verts[2], image, color, zbuffer);
         }
     }
 
