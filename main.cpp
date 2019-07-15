@@ -107,18 +107,34 @@ void triangle(Vec3f t0, Vec3f t1, Vec3f t2, Vec2f uv0, Vec2f uv1, Vec2f uv2,
     }
 }
 
+Matrix v2m(Vec3f v) {
+    Matrix mat(4, 1);
+    mat[0][0] = v.x;
+    mat[1][0] = v.y;
+    mat[2][0] = v.z;
+    mat[3][0] = 1.0f;
+    return mat;
+}
+
+Vec3f m2v(Matrix m) {
+    return Vec3f(m[0][0] / m[3][0], m[1][0] / m[3][0], m[2][0] / m[3][0]);
+}
+
 int main(int argc, char** argv) {
     if (argc != 2) {
         std::cerr << "Usage: " << argv[0] << " <model_name>" << std::endl;
         return 1;
     }
 
-    Vec3f light(0, 0, -1);
-    light.normalize();
-
     Model model(argv[1]);
     int width = 800, height = 800;
     PNGImage image(width, height, RGBColor::Black);
+
+    Vec3f light(0, 0, -1);
+    light.normalize();
+    Vec3f camera(0, 0, 3.0f);
+    Matrix perspective = Matrix::identity(4);
+    perspective[3][2] = -1.0f / camera.z;
 
     // Inicializar z-buffer a numeros negativos
     float zbuffer[height * width];
@@ -130,19 +146,19 @@ int main(int argc, char** argv) {
     for (int i = 0; i < model.nfaces(); i++) {
         std::vector<int> face = model.face(i);
         Vec3f world[3];
-        Vec3f verts[3];
+        Vec3f screen[3];
         Vec2f uvs[3];
         for (int j = 0; j < 3; j++) {
-            world[j] = model.vert(face[j]);
-            verts[j].x = (world[j].x + 1.0f) * width / 2.0f;
-            verts[j].y = (world[j].y + 1.0f) * height / 2.0f;
-            verts[j].z = world[j].z;
+            world[j] = m2v(perspective * v2m(model.vert(face[j])));
+            screen[j].x = (world[j].x + 1.25f) * width / 2.5f;
+            screen[j].y = (world[j].y + 1.25f) * height / 2.5f;
+            screen[j].z = world[j].z;
             uvs[j] = model.uv(i, j);
         }
         Vec3f normal = (world[2] - world[0]) ^ (world[1] - world[0]);
         float intensity = normal.normalize() * light;
         if (intensity > 0) {
-            triangle(verts[0], verts[1], verts[2], uvs[0], uvs[1], uvs[2],
+            triangle(screen[0], screen[1], screen[2], uvs[0], uvs[1], uvs[2],
                      model, image, intensity, zbuffer);
         }
     }
