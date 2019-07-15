@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <vector>
 #include <ostream>
 
 template <class T>
@@ -88,3 +89,23 @@ std::ostream &operator<<(std::ostream &s, Vec3<T> &vector) {
     s << "(" << vector.x << ", " << vector.y << ", " << vector.z << ")";
     return s;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+class Matrix {
+   private:
+    static const int DEFAULT_ALLOC = 4;
+    std::vector<std::vector<float>> m;
+    int rows, cols;
+
+   public:
+    Matrix(int r = DEFAULT_ALLOC, int c = DEFAULT_ALLOC);
+    inline int nrows() const;
+    inline int ncols() const;
+
+    static Matrix identity(int dimensions);
+    std::vector<float> &operator[](const int i);
+    Matrix operator*(const Matrix &a) const;
+
+    friend std::ostream &operator<<(std::ostream &s, Matrix &m);
+};
