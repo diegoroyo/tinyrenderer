@@ -1,11 +1,9 @@
 BINDIR = bin
-
-PIFOLDER = pngimage
-PNGIMAGE = pngimage
-PNGCHUNK = pngchunk
-RGBCOLOR = rgbcolor
-MODEL = model
+PIDIR = pngimage
 MAIN = main
+
+PIOBJ = $(patsubst ${PIDIR}/%.cpp,${BINDIR}/%.o,$(wildcard ${PIDIR}/*.cpp))
+PROJOBJ = $(patsubst ./%.cpp, ${BINDIR}/%.o, $(wildcard ./*.cpp))
 
 NOMBREEXE = main
 
@@ -22,17 +20,11 @@ all: ${BINDIR}/${NOMBREEXE}
 clean:
 	rm -rf ${BINDIR}/*
 
-${BINDIR}/${NOMBREEXE}: ${BINDIR}/${PNGIMAGE}.o ${BINDIR}/${PNGCHUNK}.o ${BINDIR}/${RGBCOLOR}.o ${BINDIR}/${MODEL}.o ${MAIN}.cpp
+${BINDIR}/${NOMBREEXE}: $(PIOBJ) $(PROJOBJ)
 	${CC} $^ ${CPPFLAGS} -o $@
 
-${BINDIR}/${PNGIMAGE}.o: ${PIFOLDER}/${PNGIMAGE}.cpp ${PIFOLDER}/${PNGIMAGE}.h
+${BINDIR}/%.o: ${PIDIR}/%.cpp
 	${CC} -c ${CPPFLAGS} $< -o $@
 
-${BINDIR}/${PNGCHUNK}.o: ${PIFOLDER}/${PNGCHUNK}.cpp ${PIFOLDER}/${PNGCHUNK}.h
-	${CC} -c ${CPPFLAGS} $< -o $@
-
-${BINDIR}/${RGBCOLOR}.o: ${PIFOLDER}/${RGBCOLOR}.cpp ${PIFOLDER}/${RGBCOLOR}.h
-	${CC} -c ${CPPFLAGS} $< -o $@
-
-${BINDIR}/${MODEL}.o: ${MODEL}.cpp ${MODEL}.h
+${BINDIR}/%.o: %.cpp
 	${CC} -c ${CPPFLAGS} $< -o $@
