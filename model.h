@@ -27,4 +27,5 @@ class Model {
     std::vector<int> face(int idx);
     Vec2f uv(int iface, int nvert);
     RGBColor diffuse(Vec2f uv);
+    Vec3f norm(int iface, int nvert);
 };

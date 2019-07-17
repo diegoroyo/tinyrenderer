@@ -99,3 +99,7 @@ RGBColor Model::diffuse(Vec2f uv) {
                          (int)(uv.y * diffuseMap.height), color);
     return color;
 }
+
+Vec3f Model::norm(int iface, int nvert) {
+    return norms[faces[iface][nvert].inorm];
+}
