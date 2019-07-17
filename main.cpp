@@ -45,8 +45,8 @@ void line(Vec2i p0, Vec2i p1, PNGImage& image, const RGBColor& color) {
     line(p0.x, p0.y, p1.x, p1.y, image, color);
 }
 
-// true si p está dentro del triangulo t0-t1-t2
-bool barycentric(Vec3f t0, Vec3f t1, Vec3f t2, Vec3f p, Vec3f& coords) {
+// coord. baricéntricas de p dentro del triangulo t0-t1-t2
+Vec3f barycentric(Vec3f t0, Vec3f t1, Vec3f t2, Vec3f p) {
     Vec3f ab = t1 - t0;
     Vec3f ac = t2 - t0;
     Vec3f pa = t0 - p;
@@ -59,26 +59,25 @@ bool barycentric(Vec3f t0, Vec3f t1, Vec3f t2, Vec3f p, Vec3f& coords) {
     // Es decir, las componentes x, y, z tienen el mismo signo (para u, v)
     // y (x + y) <= z (para 1-u-v)
     // También, si la z es 0 el triángulo es degenerado y no se dibuja
-    bool in_triangle = std::abs(cross.z) >= 1 && cross.x + cross.y <= cross.z &&
-                       cross.x * cross.z >= 0 && cross.y * cross.z >= 0;
-    // No se comprueba si está en el triángulo con u, v por errores de redondeo
-    if (in_triangle) {
+    Vec3f coords(-1.0f, -1.0f, -1.0f);
+    if (std::abs(cross.z) > 0.01f) {  // solo si no es degenerado
         coords.y = cross.x / cross.z;
         coords.z = cross.y / cross.z;
-        coords.x = 1.0f - coords.y - coords.z;
+        // se suma una pequeña constante para evitar errores de precisión
+        coords.x = 1.0f + 1e-4f - (cross.x + cross.y) / cross.z;
     }
-    return in_triangle;
+    return coords;
 }
 
-void triangle(Vec3f t0, Vec3f t1, Vec3f t2, Vec2f uv0, Vec2f uv1, Vec2f uv2,
-              Model& model, PNGImage& image, float intensity, float* zbuffer) {
+void triangle(Vec3f* t, Vec2f* uvs, Vec3f* norms, Model& model, PNGImage& image,
+              const Vec3f light, float* zbuffer) {
     // Bounding box (dos puntos (xmin, ymin), (xmax, ymax))
-    Vec2i bboxmin(t0.x, t0.y), bboxmax(t0.x, t0.y);
+    Vec2i bboxmin(t[0].x, t[0].y), bboxmax(t[0].x, t[0].y);
     for (int i = 0; i < 2; i++) {
-        if (t1.raw[i] < bboxmin.raw[i]) bboxmin.raw[i] = t1.raw[i];
-        if (t2.raw[i] < bboxmin.raw[i]) bboxmin.raw[i] = t2.raw[i];
-        if (t1.raw[i] > bboxmax.raw[i]) bboxmax.raw[i] = t1.raw[i];
-        if (t2.raw[i] > bboxmax.raw[i]) bboxmax.raw[i] = t2.raw[i];
+        if (t[1].raw[i] < bboxmin.raw[i]) bboxmin.raw[i] = t[1].raw[i];
+        if (t[2].raw[i] < bboxmin.raw[i]) bboxmin.raw[i] = t[2].raw[i];
+        if (t[1].raw[i] > bboxmax.raw[i]) bboxmax.raw[i] = t[1].raw[i];
+        if (t[2].raw[i] > bboxmax.raw[i]) bboxmax.raw[i] = t[2].raw[i];
     }
     // Recortar el trozo de fuera de la imagen
     if (bboxmin.x < 0) bboxmin.x = 0;
@@ -90,17 +89,23 @@ void triangle(Vec3f t0, Vec3f t1, Vec3f t2, Vec2f uv0, Vec2f uv1, Vec2f uv2,
     for (int y = bboxmin.y; y <= bboxmax.y; y++) {
         for (int x = bboxmin.x; x <= bboxmax.x; x++) {
             // Ver si el punto pertenece al triangulo
-            Vec3f bc_coords;
-            if (barycentric(t0, t1, t2, Vec3f(x, y, 0.0f), bc_coords)) {
+            Vec3f bc_coords = barycentric(t[0], t[1], t[2], Vec3f(x, y, 0.0f));
+            if (bc_coords.x >= 0 && bc_coords.y >= 0 && bc_coords.z >= 0) {
                 // zbuffer para dibujar lo más cercano a la cámara
-                float z = bc_coords * Vec3f(t0.z, t1.z, t2.z);
+                float z = bc_coords * Vec3f(t[0].z, t[1].z, t[2].z);
                 if (zbuffer[x + y * image.width] < z) {
                     zbuffer[x + y * image.width] = z;
                     // Calcular el color (pixel x-y) de la textura
                     // y multiplicarlo por la intensidad (luz)
-                    Vec2f uv = uv0 * bc_coords.x + uv1 * bc_coords.y +
-                               uv2 * bc_coords.z;
-                    image.set_pixel(x, y, model.diffuse(uv) * intensity);
+                    Vec2f uv;
+                    Vec3f norm;
+                    for (int i = 0; i < 3; i++) {
+                        uv = uv + uvs[i] * bc_coords.raw[i];
+                        norm = norm + norms[i] * bc_coords.raw[i];
+                    }
+                    float intensity = norm * light;
+                    if (intensity < 0) intensity = 0;
+                    image.set_pixel(x, y, RGBColor::White * intensity);
                 }
             }
         }
@@ -130,11 +135,11 @@ int main(int argc, char** argv) {
     int width = 800, height = 800;
     PNGImage image(width, height, RGBColor::Black);
 
-    Vec3f light(0, 0, -1);
+    Vec3f light(0, 0, 1);
     light.normalize();
     Vec3f camera(0, 0, 3.0f);
     Matrix perspective = Matrix::identity(4);
-    perspective[3][2] = -1.0f / camera.z;
+    //perspective[3][2] = -1.0f / camera.z;
 
     // Inicializar z-buffer a numeros negativos
     float zbuffer[height * width];
@@ -148,19 +153,16 @@ int main(int argc, char** argv) {
         Vec3f world[3];
         Vec3f screen[3];
         Vec2f uvs[3];
+        Vec3f norms[3];
         for (int j = 0; j < 3; j++) {
             world[j] = m2v(perspective * v2m(model.vert(face[j])));
-            screen[j].x = (world[j].x + 1.25f) * width / 2.5f;
-            screen[j].y = (world[j].y + 1.25f) * height / 2.5f;
+            screen[j].x = (world[j].x + 1.0f) * width / 2.0f;
+            screen[j].y = (world[j].y + 1.0f) * height / 2.0f;
             screen[j].z = world[j].z;
             uvs[j] = model.uv(i, j);
+            norms[j] = model.norm(i, j);
         }
-        Vec3f normal = (world[2] - world[0]) ^ (world[1] - world[0]);
-        float intensity = normal.normalize() * light;
-        if (intensity > 0) {
-            triangle(screen[0], screen[1], screen[2], uvs[0], uvs[1], uvs[2],
-                     model, image, intensity, zbuffer);
-        }
+        triangle(screen, uvs, norms, model, image, light, zbuffer);
     }
 
     image.flip_vertically();
