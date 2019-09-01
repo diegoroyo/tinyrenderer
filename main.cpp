@@ -105,11 +105,42 @@ void triangle(Vec3f* t, Vec2f* uvs, Vec3f* norms, Model& model, PNGImage& image,
                     }
                     float intensity = norm * light;
                     if (intensity < 0) intensity = 0;
-                    image.set_pixel(x, y, RGBColor::White * intensity);
+                    image.set_pixel(x, y, model.diffuse(uv) * intensity);
                 }
             }
         }
     }
+}
+
+// devuelve la matriz modelview (coordenadas del modelo
+// a coordenadas de la cámara)
+Matrix lookat(Vec3f eye, Vec3f center, Vec3f up) {
+    Vec3f z = (eye - center).normalize();
+    Vec3f x = (up ^ z).normalize();
+    Vec3f y = (z ^ x).normalize();
+    Matrix Minv = Matrix::identity(4);
+    Matrix Tr = Matrix::identity(4);
+    for (int i = 0; i < 3; i++) {
+        Minv[0][i] = x.raw[i];
+        Minv[1][i] = y.raw[i];
+        Minv[2][i] = z.raw[i];
+        Tr[i][3] = -center.raw[i];
+    }
+    return Minv * Tr;
+}
+
+// mapeo del cubo [-1, 1] * [-1, 1] * [-1, 1]
+// al cubo [x, x + w] * [y, y + h] * [0, d]
+Matrix viewportMatrix(int x, int y, int w, int h, int d) {
+    Matrix m = Matrix::identity(4);
+    m[0][3] = x + w / 2.0f;
+    m[1][3] = y + h / 2.0f;
+    m[2][3] = d / 2.0f;
+
+    m[0][0] = w / 2.0f;
+    m[1][1] = h / 2.0f;
+    m[2][2] = d / 2.0f;
+    return m;
 }
 
 Matrix v2m(Vec3f v) {
@@ -135,11 +166,13 @@ int main(int argc, char** argv) {
     int width = 800, height = 800;
     PNGImage image(width, height, RGBColor::Black);
 
-    Vec3f light(0, 0, 1);
+    Vec3f light(1, 1, 1);
     light.normalize();
-    Vec3f camera(0, 0, 3.0f);
+    Vec3f camera(7.0f, 7.0f, 7.0f), eye(-1.0f, -1.0f, -1.0f), up(0.0f, 0.0f, 1.0f);
+    Matrix modelView = lookat(camera, eye.normalize(), up);
     Matrix perspective = Matrix::identity(4);
-    //perspective[3][2] = -1.0f / camera.z;
+    perspective[3][2] = -1.0f / camera.norm();
+    Matrix viewport = viewportMatrix(0, 0, width, height, 255);
 
     // Inicializar z-buffer a numeros negativos
     float zbuffer[height * width];
@@ -155,10 +188,8 @@ int main(int argc, char** argv) {
         Vec2f uvs[3];
         Vec3f norms[3];
         for (int j = 0; j < 3; j++) {
-            world[j] = m2v(perspective * v2m(model.vert(face[j])));
-            screen[j].x = (world[j].x + 1.0f) * width / 2.0f;
-            screen[j].y = (world[j].y + 1.0f) * height / 2.0f;
-            screen[j].z = world[j].z;
+            world[j] = m2v(perspective * modelView * v2m(model.vert(face[j])));
+            screen[j] = m2v(viewport * v2m(world[j]));
             uvs[j] = model.uv(i, j);
             norms[j] = model.norm(i, j);
         }
