@@ -38,6 +38,41 @@ struct GouraudShader : public IShader {
     }
 };
 
+// Punto de luz, la intensidad disminuye respecto a la distancia al cuadrado
+struct PointLightShader : public IShader {
+    Matrix varying_vertices;
+    Vec3f varying_intensity;
+
+    Vec3f light_center;
+    float light_radius;
+
+    PointLightShader(Vec3f _light_center, float _light_radius)
+        : varying_vertices(Matrix::identity(4)),
+          light_center(_light_center),
+          light_radius(_light_radius) {}
+
+    Vec3f vertex(int iface, int nthvert) override {
+        float intensity = light * model->norm(iface, nthvert);
+        varying_intensity.raw[nthvert] = std::max(0.0f, intensity);
+        Vec3f vert = model->vert(model->face(iface)[nthvert]);
+        for (int i = 0; i < 3; i++) {
+            varying_vertices[i][nthvert] = vert.raw[i];
+        }
+        return m2v(viewport * projection * modelView * v2m(vert));
+    }
+
+    bool fragment(Vec3f bar, RGBColor& color) override {
+        Vec3f pos = m2v(varying_vertices * v2m(bar));
+        float d = (light_center - pos).norm();
+        if (d > light_radius) return true;
+        float intensity_distance = 1.0f - d / light_radius;
+        intensity_distance = intensity_distance * intensity_distance;
+        float intensity_norm = varying_intensity * bar;
+        color = RGBColor::White * intensity_distance * intensity_norm;
+        return false;
+    }
+};
+
 int main(int argc, char** argv) {
     if (argc != 2) {
         std::cerr << "Usage: " << argv[0] << " <model_name>" << std::endl;
@@ -64,7 +99,9 @@ int main(int argc, char** argv) {
     }
 
     // Dibujar el modelo
-    GouraudShader shader;
+    Vec3f lightCenter(0.0f, 0.0f, 0.25f);
+    float lightRadius = 1.0f;
+    PointLightShader shader(lightCenter, lightRadius);
     for (int i = 0; i < model->nfaces(); i++) {
         Vec3f screen[3];
         for (int j = 0; j < 3; j++) {
