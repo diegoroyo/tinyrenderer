@@ -23,8 +23,10 @@ Vec3f m2v(Matrix m) {
 
 struct GouraudShader : public IShader {
     Vec3f varying_intensity;  // varying: escrito por vertex, leido por fragment
+    Vec2f varying_uvs[3];
 
     Vec3f vertex(int iface, int nthvert) override {
+        varying_uvs[nthvert] = model->uv(iface, nthvert);
         float intensity = light * model->norm(iface, nthvert);
         varying_intensity.raw[nthvert] = std::max(0.0f, intensity);
         Vec3f vert = model->vert(model->face(iface)[nthvert]);
@@ -32,8 +34,12 @@ struct GouraudShader : public IShader {
     }
 
     bool fragment(Vec3f bar, RGBColor& color) override {
+        Vec2f uv;
+        for (int i = 0; i < 3; i++) {
+            uv = uv + varying_uvs[i] * bar.raw[i];
+        }
         float intensity = varying_intensity * bar;
-        color = RGBColor::White * intensity;
+        color = model->diffuse(uv) * intensity;
         return false;
     }
 };
@@ -99,9 +105,10 @@ int main(int argc, char** argv) {
     }
 
     // Dibujar el modelo
-    Vec3f lightCenter(0.0f, 0.0f, 0.25f);
-    float lightRadius = 1.0f;
-    PointLightShader shader(lightCenter, lightRadius);
+    // Vec3f lightCenter(0.0f, 0.0f, 0.25f);
+    // float lightRadius = 1.0f;
+    // PointLightShader shader(lightCenter, lightRadius);
+    GouraudShader shader;
     for (int i = 0; i < model->nfaces(); i++) {
         Vec3f screen[3];
         for (int j = 0; j < 3; j++) {
